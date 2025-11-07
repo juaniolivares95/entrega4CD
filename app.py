@@ -4,7 +4,7 @@ import altair as alt # <-- Necesitamos importar altair
 import joblib  
 import numpy as np
 from sklearn.model_selection import train_test_split 
-import json # <-- Necesitamos importar json
+# No necesitamos 'import json'
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -29,26 +29,81 @@ def load_data():
         st.error("Error: Los datos están vacíos después de la limpieza.")
         return (None,) * 10
     
-    # --- ¡LA CORRECCIÓN DEFINITIVA ESTÁ AQUÍ! ---
-    # Leemos el JSON y lo convertimos de vuelta a un objeto Altair
+    # --- ¡CORRECCIÓN! CONSTRUIMOS LOS GRÁFICOS AQUÍ ---
     try:
-        with open('piramide_ingresos.json') as f:
-            chart1_dict = json.load(f)
-        chart1 = alt.Chart.from_dict(chart1_dict) # <--- Corrección
+        # --- Gráfico 1: Pirámide (construido desde df_clean) ---
+        pir = (
+            df_clean.groupby(["NivelEducativo","Sexo"], as_index=False)
+              .agg({"IngresoPromedioUSD":"mean"})
+        )
+        pir["IngresoPromedioUSD_signed"] = pir.apply(
+            lambda x: -x["IngresoPromedioUSD"] if x["Sexo"] == "Mujer" else x["IngresoPromedioUSD"], axis=1
+        )
+        base = (
+            alt.Chart(pir)
+            .mark_bar()
+            .encode(
+                x=alt.X("IngresoPromedioUSD_signed:Q", title="Ingreso Promedio (USD)", axis=alt.Axis(format="$.0f")),
+                y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"], title="Nivel Educativo"),
+                color=alt.Color("Sexo:N", title="Sexo", scale=alt.Scale(domain=["Varón","Mujer"], range=["#1f77b4","#ff7f0e"])),
+                tooltip=["Sexo","NivelEducativo", alt.Tooltip("IngresoPromedioUSD:Q", format=",.1f", title="Ingreso Promedio (USD)")]
+            )
+            .properties(width=600, height=350, title="Pirámide educativa de ingresos – Gran Mendoza")
+        )
+        text = alt.Chart(pir).mark_text(align="center", dx=0).encode(
+            x=alt.X("IngresoPromedioUSD_signed:Q"),
+            y=alt.Y("NivelEducativo:N"),
+            text=alt.Text("IngresoPromedioUSD:Q", format=",.0f")
+        )
+        chart1 = (base + text).resolve_scale(x="shared")
 
-        with open('panel_brushing.json') as f:
-            chart2_dict = json.load(f)
-        chart2 = alt.Chart.from_dict(chart2_dict) # <--- Corrección
+        # --- Gráfico 2: Panel Brushing (construido desde df_clean) ---
+        brush = alt.selection_interval(encodings=["x","y"])
+        scatter = (
+            alt.Chart(df_clean)
+            .mark_circle(size=90, opacity=0.7)
+            .encode(
+                x=alt.X("HorasTrabajoPromedio:Q", title="Horas semanales"),
+                y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
+                color=alt.condition(brush, "Sexo:N", alt.value("lightgray")),
+                tooltip=["Sexo","NivelEducativo","RangoEtario", alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f"), alt.Tooltip("HorasTrabajoPromedio:Q",format=",.1f")]
+            )
+            .add_params(brush)
+            .properties(width=600, height=350, title="Selección libre: Ingreso vs Horas trabajadas")
+        )
+        bars = (
+            alt.Chart(df_clean)
+            .mark_bar()
+            .encode(
+                x=alt.X("mean(IngresoPromedioUSD):Q", title="Ingreso Promedio (USD)"),
+                y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]),
+                color=alt.Color("Sexo:N", title="Sexo")
+            )
+            .transform_filter(brush)
+            .properties(width=600, height=250, title="Detalle educativo del subconjunto seleccionado")
+        )
+        chart2 = scatter & bars
 
-        with open('timeline_ingresos.json') as f:
-            chart3_dict = json.load(f)
-        chart3 = alt.Chart.from_dict(chart3_dict) # <--- Corrección
+        # --- Gráfico 3: Timeline (construido desde df_clean) ---
+        timeline_data = (
+            df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
+              .agg({"IngresoPromedioUSD":"mean"})
+        )
+        chart3 = (
+            alt.Chart(timeline_data)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
+                y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
+                color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
+                tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
+            )
+            .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
+            .interactive()
+        )
 
-    except FileNotFoundError as e:
-        st.error(f"Error: No se encontró un archivo JSON esencial: {e}.")
-        chart1, chart2, chart3 = None, None, None
     except Exception as e:
-        st.error(f"Error al cargar los gráficos JSON con from_dict: {e}")
+        st.error(f"Error al crear los gráficos de Altair: {e}")
         chart1, chart2, chart3 = None, None, None
     # --- FIN DE LA CORRECCIÓN ---
     
@@ -85,7 +140,6 @@ def load_model():
         st.error("Error Crítico: No se encontró 'modelo_ridge.pkl'.")
         return None
     except Exception as e:
-        # Esto captura el error de versión de scikit-learn
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
@@ -145,7 +199,7 @@ if df_clean is not None:
         st.altair_chart(chart1, use_container_width=True) 
         st.markdown("""
         Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
-        """) # (Textos acortados)
+        """) 
 
     if chart3:
         st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
