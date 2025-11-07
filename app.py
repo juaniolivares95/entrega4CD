@@ -4,7 +4,6 @@ import altair as alt
 import joblib  
 import numpy as np
 from sklearn.model_selection import train_test_split 
-# No necesitamos 'import json'
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -21,7 +20,7 @@ def load_data():
         df = pd.read_csv('Tabla_Final.csv')
     except FileNotFoundError:
         st.error("Error: No se encontró 'Tabla_Final.csv'.")
-        return (None,) * 10
+        return (None,) * 10 
 
     df_clean = df.dropna(subset=['IngresoPromedio']).copy()
     
@@ -30,7 +29,7 @@ def load_data():
         return (None,) * 10
     
     # --- VOLVEMOS A USAR alt.load_chart ---
-    # Esto funcionará ahora que 'requirements.txt' tiene la versión correcta
+    # Esto funcionará ahora que 'requirements.txt' tiene la versión v5.5.0
     try:
         chart1 = alt.load_chart('piramide_ingresos.json')
         chart2 = alt.load_chart('panel_brushing.json')
@@ -38,7 +37,10 @@ def load_data():
     except FileNotFoundError as e:
         st.error(f"Error: No se encontró un archivo JSON esencial: {e}.")
         chart1, chart2, chart3 = None, None, None
-    # --- FIN DE LA CORRECCIÓN ---
+    except Exception as e:
+        # Captura si alt.load_chart falla por otra razón
+        st.error(f"Error al cargar los gráficos JSON con alt.load_chart: {e}")
+        chart1, chart2, chart3 = None, None, None
     
     try:
         niveles_educativos = df_clean['NivelEducativo'].unique()
@@ -112,7 +114,7 @@ elif df_clean is not None:
         try:
             prediction = model.predict(input_df)
             st.sidebar.subheader("Resultado de la Predicción:")
-            st.sidebar.success(f"Ingreso Promedio Estimado: **${prediction[0]:,.2f}**")
+            st.sidebar.success(f"Ingreso Promd-io Estimado: **${prediction[0]:,.2f}**")
         except Exception as e:
             st.sidebar.error(f"Error al predecir: {e}")
 
@@ -132,8 +134,8 @@ if df_clean is not None:
         st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
         st.altair_chart(chart1, use_container_width=True) 
         st.markdown("""
-        Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo. Las barras, presentadas de forma opuesta, ilustran una clara **brecha de género**...
-        """) # (textos de conclusión acortados por brevedad)
+        Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
+        """) 
 
     if chart3:
         st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
@@ -146,7 +148,7 @@ if df_clean is not None:
         st.subheader("Panel Interactivo: Ingreso vs. Horas de Trabajo y Nivel Educativo")
         st.altair_chart(chart2, use_container_width=True)
         st.markdown("""
-        Este panel doble permite una **exploración interactiva** de los datos... **Instrucción:** Use el mouse para **seleccionar un área rectangular**...
+        Este panel doble permite una **exploración interactiva**... **Instrucción:** Use el mouse para **seleccionar un área rectangular**...
         """)
 
     st.header("2. Evaluación del Modelo de Regresión")
