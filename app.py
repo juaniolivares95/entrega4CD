@@ -4,7 +4,7 @@ import altair as alt
 import joblib  
 import numpy as np
 from sklearn.model_selection import train_test_split 
-import json # <-- ¡IMPORTANTE! Importamos la librería JSON
+import json
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -20,13 +20,18 @@ def load_data():
     try:
         df = pd.read_csv('Tabla_Final.csv')
     except FileNotFoundError:
-        st.error("Error: No se encontró 'Tabla_Final.csv'. Asegúrate de que esté en la misma carpeta que app.py.")
-        return (None,) * 10 # Retorna Nones para evitar más errores
+        st.error("Error: No se encontró 'Tabla_Final.csv'. Asegúrate de que esté en el repositorio de GitHub.")
+        return (None,) * 10 
 
     df_clean = df.dropna(subset=['IngresoPromedio']).copy()
     
-    # --- ¡CORRECCIÓN APLICADA AQUÍ! ---
-    # En lugar de alt.load_chart, leemos el JSON como un diccionario.
+    # --- NUEVO CHECK ---
+    # Comprobar si la limpieza dejó el DataFrame vacío
+    if df_clean.empty:
+        st.error("Error: Los datos están vacíos después de la limpieza (dropna). No se puede continuar.")
+        return (None,) * 10
+    # --- FIN DE CHECK ---
+
     try:
         with open('piramide_ingresos.json') as f:
             chart1 = json.load(f)
@@ -35,48 +40,64 @@ def load_data():
         with open('timeline_ingresos.json') as f:
             chart3 = json.load(f)
     except FileNotFoundError as e:
-        st.error(f"Error: No se encontró un archivo JSON esencial: {e}. Asegúrate de que los 3 archivos .json estén en la carpeta.")
+        st.error(f"Error: No se encontró un archivo JSON esencial: {e}.")
         chart1, chart2, chart3 = None, None, None
-    # --- FIN DE LA CORRECCIÓN ---
     
-    niveles_educativos = df_clean['NivelEducativo'].unique()
-    rangos_etarios = df_clean['RangoEtario'].unique()
-    sexos = df_clean['Sexo'].unique()
+    try:
+        niveles_educativos = df_clean['NivelEducativo'].unique()
+        rangos_etarios = df_clean['RangoEtario'].unique()
+        sexos = df_clean['Sexo'].unique()
+        
+        CATEGORICAL_FEATURES = ['NivelEducativo', 'RangoEtario', 'Sexo']
+        NUMERIC_FEATURES = ['HorasTrabajoPromedio', 'TasaActividadPonderada', 'TasaEmpleoPonderada', 'Poblacion']
+        FEATURES = CATEGORICAL_FEATURES + NUMERIC_FEATURES
+        TARGET = 'IngresoPromedio'
+
+        X = df_clean[FEATURES]
+        y = df_clean[TARGET]
     
-    CATEGORICAL_FEATURES = ['NivelEducativo', 'RangoEtario', 'Sexo']
-    NUMERIC_FEATURES = ['HorasTrabajoPromedio', 'TasaActividadPonderada', 'TasaEmpleoPonderada', 'Poblacion']
-    FEATURES = CATEGORICAL_FEATURES + NUMERIC_FEATURES
-    TARGET = 'IngresoPromedio'
+        _, X_test, _, y_test = train_test_split(
+            X, y, test_size=0.3, random_state=42
+        )
+    except Exception as e:
+        st.error(f"Error al procesar las columnas del DataFrame: {e}")
+        return (None,) * 10
 
-    X = df_clean[FEATURES]
-    y = df_clean[TARGET]
-    
-    _, X_test, _, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=42
-    )
+    return (df_clean, chart1, chart2, chart3, 
+            niveles_educativos, rangos_etarios, sexos, 
+            X_test, y_test, FEATURES)
 
-    return df_clean, chart1, chart2, chart3, niveles_educativos, rangos_etarios, sexos, X_test, y_test, FEATURES
-
+# --- ¡FUNCIÓN MODIFICADA! ---
 @st.cache_resource
 def load_model():
     try:
         model = joblib.load('modelo_ridge.pkl')
         return model
     except FileNotFoundError:
+        st.error("Error Crítico: No se encontró 'modelo_ridge.pkl'. Asegúrate de que esté en el repositorio.")
         return None
+    except Exception as e:
+        # Captura cualquier otro error (ej. error de unpickling por versión)
+        st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
+        return None
+# --- FIN DE MODIFICACIÓN ---
 
 # Cargar todo
 (df_clean, chart1, chart2, chart3, 
  niveles_educativos, rangos_etarios, sexos, 
  X_test, y_test, FEATURES) = load_data()
 
+model = load_model() # Esta línea ahora es segura y siempre asignará un valor.
+
 # --- Barra Lateral (Sidebar) para el Modelo ---
 st.sidebar.title("🤖 Probar el Modelo (Ridge Regression)")
 st.sidebar.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
 
+# Esta lógica ahora funciona porque 'model' siempre está definido (como el modelo o None)
 if model is None:
-    st.sidebar.error("Error Crítico: 'modelo_ridge.pkl' no encontrado.")
+    st.sidebar.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
 elif df_clean is not None:
+    # (El resto del código de la sidebar es el mismo)
     inputs = {}
     st.sidebar.header("Variables Categóricas")
     inputs['NivelEducativo'] = st.sidebar.selectbox("Nivel Educativo", options=niveles_educativos)
@@ -112,12 +133,11 @@ if df_clean is not None:
     - **Datos:** `Tabla_Final.csv` ({len(df_clean)} segmentos analizados)
     """)
 
-    # --- Sección 1: Visualizaciones Interactivas (Altair) ---
+    # (El resto del código para mostrar gráficos y datos es el mismo)
     st.header("1. Visualizaciones Interactivas (Altair)")
 
     if chart1:
         st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
-        # st.altair_chart ahora recibe un diccionario, ¡y funciona!
         st.altair_chart(chart1, use_container_width=True) 
         st.markdown("""
         Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo. Las barras, presentadas de forma opuesta, ilustran una clara **brecha de género**: en casi todos los niveles, el ingreso promedio de los varones (en azul) es superior al de las mujeres (en naranja).
@@ -143,7 +163,6 @@ if df_clean is not None:
         **Instrucción:** Use el mouse para **seleccionar un área rectangular** del gráfico de dispersión. El gráfico de barras (abajo) se actualizará automáticamente para mostrar la composición educativa y la brecha de género solo del subconjunto seleccionado, permitiendo un análisis focalizado.
         """)
 
-    # --- Sección 2: Evaluación del Modelo (Adicional) ---
     st.header("2. Evaluación del Modelo de Regresión")
     st.subheader("Valores Reales vs. Valores Predichos (Datos de Test)")
     st.markdown("Esta visualización (creada con el conjunto de *test*) compara el ingreso real (Eje Y) con el ingreso que nuestro modelo predijo (Eje X).")
@@ -166,11 +185,10 @@ if df_clean is not None:
         st.altair_chart(chart_pred + line, use_container_width=True)
         st.markdown(" idealmente, los puntos deberían caer sobre la **línea roja** (predicción perfecta).")
     
-    # --- Sección 3: Exploración de Datos ---
     st.header("3. Exploración de los Datos Completos")
     with st.expander("Ver y Filtrar la 'Tabla_Final' completa", expanded=False):
         st.dataframe(df_clean)
         st.markdown(f"Mostrando **{len(df_clean)}** registros limpios.")
 
 else:
-    st.error("No se pudo cargar el DataFrame. El resto de la aplicación no puede continuar.")
+    st.error("No se pudieron cargar los datos ('Tabla_Final.csv'). La aplicación no puede mostrar contenido.")
