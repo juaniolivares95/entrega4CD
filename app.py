@@ -4,6 +4,7 @@ import altair as alt
 import joblib  
 import numpy as np
 from sklearn.model_selection import train_test_split 
+import json # <-- ¡IMPORTANTE! Importamos la librería JSON
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -24,14 +25,19 @@ def load_data():
 
     df_clean = df.dropna(subset=['IngresoPromedio']).copy()
     
-    # Cargar 3 gráficos
+    # --- ¡CORRECCIÓN APLICADA AQUÍ! ---
+    # En lugar de alt.load_chart, leemos el JSON como un diccionario.
     try:
-        chart1 = alt.load_chart('piramide_ingresos.json')
-        chart2 = alt.load_chart('panel_brushing.json')
-        chart3 = alt.load_chart('timeline_ingresos.json')
+        with open('piramide_ingresos.json') as f:
+            chart1 = json.load(f)
+        with open('panel_brushing.json') as f:
+            chart2 = json.load(f)
+        with open('timeline_ingresos.json') as f:
+            chart3 = json.load(f)
     except FileNotFoundError as e:
         st.error(f"Error: No se encontró un archivo JSON esencial: {e}. Asegúrate de que los 3 archivos .json estén en la carpeta.")
         chart1, chart2, chart3 = None, None, None
+    # --- FIN DE LA CORRECCIÓN ---
     
     niveles_educativos = df_clean['NivelEducativo'].unique()
     rangos_etarios = df_clean['RangoEtario'].unique()
@@ -111,7 +117,8 @@ if df_clean is not None:
 
     if chart1:
         st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
-        st.altair_chart(chart1, use_container_width=True)
+        # st.altair_chart ahora recibe un diccionario, ¡y funciona!
+        st.altair_chart(chart1, use_container_width=True) 
         st.markdown("""
         Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo. Las barras, presentadas de forma opuesta, ilustran una clara **brecha de género**: en casi todos los niveles, el ingreso promedio de los varones (en azul) es superior al de las mujeres (en naranja).
 
