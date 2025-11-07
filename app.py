@@ -48,7 +48,7 @@ def load_app_assets() -> AppAssets | None:
         return None
     
     try:
-        # --- Gráfico 1: Pirámide (construido desde df_clean) ---
+        # --- Gráfico 1: Pirámide ---
         pir = (
             df_clean.groupby(["NivelEducativo","Sexo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
@@ -74,7 +74,7 @@ def load_app_assets() -> AppAssets | None:
         )
         chart1 = (base + text).resolve_scale(x="shared")
 
-        # --- Gráfico 2: Panel Brushing (construido desde df_clean) ---
+        # --- Gráfico 2: Panel Brushing ---
         brush = alt.selection_interval(encodings=["x","y"])
         scatter = (
             alt.Chart(df_clean)
@@ -101,7 +101,7 @@ def load_app_assets() -> AppAssets | None:
         )
         chart2 = scatter & bars
 
-        # --- Gráfico 3: Timeline (construido desde df_clean) ---
+        # --- Gráfico 3: Timeline ---
         timeline_data = (
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
@@ -124,7 +124,6 @@ def load_app_assets() -> AppAssets | None:
         chart1, chart2, chart3 = None, None, None
     
     try:
-        # Usamos .tolist() para guardar listas simples en el dataclass
         niveles_educativos = df_clean['NivelEducativo'].unique().tolist()
         rangos_etarios = df_clean['RangoEtario'].unique().tolist()
         sexos = df_clean['Sexo'].unique().tolist()
@@ -264,7 +263,6 @@ if assets is not None:
             tooltip=[alt.Tooltip('Ingreso Real (y_test)', format=',.2f'), alt.Tooltip('Ingreso Predicho (y_pred)', format=',.2f')]
         ).interactive()
         
-        # --- MEJORA: LÍNEA DE PREDICCIÓN PERFECTA DINÁMICA ---
         # 1. Calcular dinámicamente el rango para la línea
         min_val = min(plot_data['Ingreso Real (y_test)'].min(), plot_data['Ingreso Predicho (y_pred)'].min())
         max_val = max(plot_data['Ingreso Real (y_test)'].max(), plot_data['Ingreso Predicho (y_pred)'].max())
