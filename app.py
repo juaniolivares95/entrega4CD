@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import altair as alt # <-- Necesitamos importar altair
 import joblib  
 import numpy as np
 from sklearn.model_selection import train_test_split 
+import json # <-- Necesitamos importar json
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -28,19 +29,28 @@ def load_data():
         st.error("Error: Los datos están vacíos después de la limpieza.")
         return (None,) * 10
     
-    # --- VOLVEMOS A USAR alt.load_chart ---
-    # Esto funcionará ahora que 'requirements.txt' tiene la versión v5.5.0
+    # --- ¡LA CORRECCIÓN DEFINITIVA ESTÁ AQUÍ! ---
+    # Leemos el JSON y lo convertimos de vuelta a un objeto Altair
     try:
-        chart1 = alt.load_chart('piramide_ingresos.json')
-        chart2 = alt.load_chart('panel_brushing.json')
-        chart3 = alt.load_chart('timeline_ingresos.json')
+        with open('piramide_ingresos.json') as f:
+            chart1_dict = json.load(f)
+        chart1 = alt.Chart.from_dict(chart1_dict) # <--- Corrección
+
+        with open('panel_brushing.json') as f:
+            chart2_dict = json.load(f)
+        chart2 = alt.Chart.from_dict(chart2_dict) # <--- Corrección
+
+        with open('timeline_ingresos.json') as f:
+            chart3_dict = json.load(f)
+        chart3 = alt.Chart.from_dict(chart3_dict) # <--- Corrección
+
     except FileNotFoundError as e:
         st.error(f"Error: No se encontró un archivo JSON esencial: {e}.")
         chart1, chart2, chart3 = None, None, None
     except Exception as e:
-        # Captura si alt.load_chart falla por otra razón
-        st.error(f"Error al cargar los gráficos JSON con alt.load_chart: {e}")
+        st.error(f"Error al cargar los gráficos JSON con from_dict: {e}")
         chart1, chart2, chart3 = None, None, None
+    # --- FIN DE LA CORRECCIÓN ---
     
     try:
         niveles_educativos = df_clean['NivelEducativo'].unique()
@@ -75,7 +85,7 @@ def load_model():
         st.error("Error Crítico: No se encontró 'modelo_ridge.pkl'.")
         return None
     except Exception as e:
-        # Esto capturará el error de versión si persiste
+        # Esto captura el error de versión de scikit-learn
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
@@ -114,7 +124,7 @@ elif df_clean is not None:
         try:
             prediction = model.predict(input_df)
             st.sidebar.subheader("Resultado de la Predicción:")
-            st.sidebar.success(f"Ingreso Promd-io Estimado: **${prediction[0]:,.2f}**")
+            st.sidebar.success(f"Ingreso Promedio Estimado: **${prediction[0]:,.2f}**")
         except Exception as e:
             st.sidebar.error(f"Error al predecir: {e}")
 
@@ -135,7 +145,7 @@ if df_clean is not None:
         st.altair_chart(chart1, use_container_width=True) 
         st.markdown("""
         Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
-        """) 
+        """) # (Textos acortados)
 
     if chart3:
         st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
