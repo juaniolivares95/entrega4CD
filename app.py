@@ -1,10 +1,24 @@
 import streamlit as st
 import pandas as pd
-import altair as alt # <-- Necesitamos importar altair
-import joblib  
-import numpy as np
+import altair as alt 
+import joblib 
 from sklearn.model_selection import train_test_split 
-# No necesitamos 'import json'
+from dataclasses import dataclass
+
+# --- Definición de la Estructura de Activos ---
+@dataclass
+class AppAssets:
+    """Contiene todos los datos, gráficos y listas pre-procesadas para la app."""
+    df: pd.DataFrame
+    chart1: alt.Chart
+    chart2: alt.Chart
+    chart3: alt.Chart
+    niveles_educativos: list
+    rangos_etarios: list
+    sexos: list
+    X_test: pd.DataFrame
+    y_test: pd.Series
+    FEATURES: list
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -16,20 +30,23 @@ st.set_page_config(
 # --- Carga de Datos, Modelo y Gráficos ---
 
 @st.cache_data
-def load_data():
+def load_app_assets() -> AppAssets | None:
+    """
+    Carga el CSV, limpia los datos, genera los gráficos de Altair y prepara
+    los datos para el modelo. Retorna un objeto AppAssets o None si falla.
+    """
     try:
         df = pd.read_csv('Tabla_Final.csv')
     except FileNotFoundError:
         st.error("Error: No se encontró 'Tabla_Final.csv'.")
-        return (None,) * 10 
+        return None
 
     df_clean = df.dropna(subset=['IngresoPromedio']).copy()
     
     if df_clean.empty:
         st.error("Error: Los datos están vacíos después de la limpieza.")
-        return (None,) * 10
+        return None
     
-    # --- ¡CORRECCIÓN! CONSTRUIMOS LOS GRÁFICOS AQUÍ ---
     try:
         # --- Gráfico 1: Pirámide (construido desde df_clean) ---
         pir = (
@@ -105,12 +122,12 @@ def load_data():
     except Exception as e:
         st.error(f"Error al crear los gráficos de Altair: {e}")
         chart1, chart2, chart3 = None, None, None
-    # --- FIN DE LA CORRECCIÓN ---
     
     try:
-        niveles_educativos = df_clean['NivelEducativo'].unique()
-        rangos_etarios = df_clean['RangoEtario'].unique()
-        sexos = df_clean['Sexo'].unique()
+        # Usamos .tolist() para guardar listas simples en el dataclass
+        niveles_educativos = df_clean['NivelEducativo'].unique().tolist()
+        rangos_etarios = df_clean['RangoEtario'].unique().tolist()
+        sexos = df_clean['Sexo'].unique().tolist()
         
         CATEGORICAL_FEATURES = ['NivelEducativo', 'RangoEtario', 'Sexo']
         NUMERIC_FEATURES = ['HorasTrabajoPromedio', 'TasaActividadPonderada', 'TasaEmpleoPonderada', 'Poblacion']
@@ -125,14 +142,25 @@ def load_data():
         )
     except Exception as e:
         st.error(f"Error al procesar las columnas del DataFrame: {e}")
-        return (None,) * 10
+        return None
 
-    return (df_clean, chart1, chart2, chart3, 
-            niveles_educativos, rangos_etarios, sexos, 
-            X_test, y_test, FEATURES)
+    # Empaquetamos todo en el objeto AppAssets y lo retornamos
+    return AppAssets(
+        df=df_clean,
+        chart1=chart1,
+        chart2=chart2,
+        chart3=chart3,
+        niveles_educativos=niveles_educativos,
+        rangos_etarios=rangos_etarios,
+        sexos=sexos,
+        X_test=X_test,
+        y_test=y_test,
+        FEATURES=FEATURES
+    )
 
 @st.cache_resource
 def load_model():
+    """Carga el modelo .pkl cacheado."""
     try:
         model = joblib.load('modelo_ridge.pkl')
         return model
@@ -143,25 +171,24 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-# Cargar todo
-(df_clean, chart1, chart2, chart3, 
- niveles_educativos, rangos_etarios, sexos, 
- X_test, y_test, FEATURES) = load_data()
-
+# --- Cargar todo ---
+# Ahora solo tenemos dos variables principales: assets y model
+assets = load_app_assets()
 model = load_model()
 
 # --- Barra Lateral (Sidebar) ---
-st.sidebar.title("🤖 Probar el Modelo (Ridge Regression)")
+st.sidebar.title("Probar el Modelo (Ridge Regression)")
 st.sidebar.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
 
 if model is None:
     st.sidebar.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
-elif df_clean is not None:
+elif assets is not None:
     inputs = {}
     st.sidebar.header("Variables Categóricas")
-    inputs['NivelEducativo'] = st.sidebar.selectbox("Nivel Educativo", options=niveles_educativos)
-    inputs['RangoEtario'] = st.sidebar.selectbox("Rango Etario", options=rangos_etarios)
-    inputs['Sexo'] = st.sidebar.selectbox("Sexo", options=sexos)
+    # Usamos los 'assets' para poblar los selectbox
+    inputs['NivelEducativo'] = st.sidebar.selectbox("Nivel Educativo", options=assets.niveles_educativos)
+    inputs['RangoEtario'] = st.sidebar.selectbox("Rango Etario", options=assets.rangos_etarios)
+    inputs['Sexo'] = st.sidebar.selectbox("Sexo", options=assets.sexos)
 
     st.sidebar.header("Variables Numéricas")
     inputs['HorasTrabajoPromedio'] = st.sidebar.number_input("Horas de Trabajo Promedio", min_value=0.0, max_value=80.0, value=40.0, step=0.1)
@@ -170,7 +197,8 @@ elif df_clean is not None:
     inputs['Poblacion'] = st.sidebar.number_input("Población del Segmento", min_value=0, max_value=100000, value=1000, step=100)
 
     if st.sidebar.button("Predecir Ingreso Promedio"):
-        input_df = pd.DataFrame([inputs], columns=FEATURES)
+        # Usamos 'assets.FEATURES' para asegurar el orden de las columnas
+        input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
         st.sidebar.markdown("---")
         st.sidebar.subheader("Datos de Entrada:")
         st.sidebar.dataframe(input_df)
@@ -185,32 +213,33 @@ elif df_clean is not None:
 # --- Cuerpo Principal ---
 st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
 
-if df_clean is not None:
+# Todo el cuerpo de la app depende de que 'assets' se haya cargado
+if assets is not None:
     st.markdown(f"""
     Bienvenido al dashboard del proyecto. Esta aplicación integra los hallazgos de las entregas anteriores.
     - **Modelo Predictivo:** `Ridge Regression` (R² Test: 0.680, RMSE Test: $21,102.53)
-    - **Datos:** `Tabla_Final.csv` ({len(df_clean)} segmentos analizados)
+    - **Datos:** `Tabla_Final.csv` ({len(assets.df)} segmentos analizados)
     """)
 
     st.header("1. Visualizaciones Interactivas (Altair)")
 
-    if chart1:
+    if assets.chart1:
         st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
-        st.altair_chart(chart1, use_container_width=True) 
+        st.altair_chart(assets.chart1, use_container_width=True) 
         st.markdown("""
         Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
         """) 
 
-    if chart3:
+    if assets.chart3:
         st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
-        st.altair_chart(chart3, use_container_width=True)
+        st.altair_chart(assets.chart3, use_container_width=True)
         st.markdown("""
         Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios...
         """)
 
-    if chart2:
+    if assets.chart2:
         st.subheader("Panel Interactivo: Ingreso vs. Horas de Trabajo y Nivel Educativo")
-        st.altair_chart(chart2, use_container_width=True)
+        st.altair_chart(assets.chart2, use_container_width=True)
         st.markdown("""
         Este panel doble permite una **exploración interactiva**... **Instrucción:** Use el mouse para **seleccionar un área rectangular**...
         """)
@@ -220,27 +249,42 @@ if df_clean is not None:
     st.markdown("Esta visualización (creada con el conjunto de *test*) compara el ingreso real (Eje Y) con el ingreso que nuestro modelo predijo (Eje X).")
 
     if model is not None:
-        y_test_pred = model.predict(X_test)
+        # Predecimos usando los datos de test cacheados en 'assets'
+        y_test_pred = model.predict(assets.X_test)
+        
         plot_data = pd.DataFrame({
-            'Ingreso Real (y_test)': y_test,
+            'Ingreso Real (y_test)': assets.y_test,
             'Ingreso Predicho (y_pred)': y_test_pred
         })
         
+        # Gráfico de dispersión
         chart_pred = alt.Chart(plot_data).mark_circle(size=60).encode(
             x=alt.X('Ingreso Predicho (y_pred)', title='Ingreso Predicho (ARS)', scale=alt.Scale(zero=False)),
             y=alt.Y('Ingreso Real (y_test)', title='Ingreso Real (ARS)', scale=alt.Scale(zero=False)),
             tooltip=[alt.Tooltip('Ingreso Real (y_test)', format=',.2f'), alt.Tooltip('Ingreso Predicho (y_pred)', format=',.2f')]
         ).interactive()
         
-        line = alt.Chart(pd.DataFrame({'x': [0, 120000], 'y': [0, 120000]})).mark_line(color='red', strokeDash=[5,5]).encode(x='x', y='y')
+        # --- MEJORA: LÍNEA DE PREDICCIÓN PERFECTA DINÁMICA ---
+        # 1. Calcular dinámicamente el rango para la línea
+        min_val = min(plot_data['Ingreso Real (y_test)'].min(), plot_data['Ingreso Predicho (y_pred)'].min())
+        max_val = max(plot_data['Ingreso Real (y_test)'].max(), plot_data['Ingreso Predicho (y_pred)'].max())
         
+        # 2. Crear el DataFrame para la línea usando esos valores
+        line_df = pd.DataFrame({'x': [min_val, max_val], 'y': [min_val, max_val]})
+        
+        # 3. Crear la línea usando el nuevo line_df
+        line = alt.Chart(line_df).mark_line(color='red', strokeDash=[5,5]).encode(x='x', y='y')
+        
+        # Combinar el gráfico de dispersión + la línea
         st.altair_chart(chart_pred + line, use_container_width=True)
         st.markdown(" idealmente, los puntos deberían caer sobre la **línea roja** (predicción perfecta).")
     
     st.header("3. Exploración de los Datos Completos")
     with st.expander("Ver y Filtrar la 'Tabla_Final' completa", expanded=False):
-        st.dataframe(df_clean)
-        st.markdown(f"Mostrando **{len(df_clean)}** registros limpios.")
+        # Usamos 'assets.df' para mostrar el dataframe
+        st.dataframe(assets.df)
+        st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
 else:
+    # Este es el 'else' principal que se activa si 'assets' es None
     st.error("No se pudieron cargar los datos ('Tabla_Final.csv'). La aplicación no puede mostrar contenido.")
