@@ -210,7 +210,7 @@ elif assets is not None:
             st.sidebar.error(f"Error al predecir: {e}")
 
 # --- Cuerpo Principal ---
-st.title("📊 4 Entrega: Visualización e Integración de Modelos")
+st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
 
 # Todo el cuerpo de la app depende de que 'assets' se haya cargado
 if assets is not None:
