@@ -114,38 +114,29 @@ def load_app_assets() -> AppAssets | None:
         )
         chart2 = scatter & bars
 
-        # --- Gráfico 3: Timeline (¡MEJORA DE HOVER!) ---
+        # --- Gráfico 3: Timeline (¡AJUSTADO A CLIC EN LEYENDA!) ---
         timeline_data = (
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
         )
         
-        # 1. Crear una selección 'single' (una sola línea) que se activa en 'mouseover'
-        hover_selection = alt.selection_single(
-            fields=['NivelEducativo'], 
-            nearest=True,  # Selecciona la línea más cercana al mouse
-            on='mouseover', # Se activa al pasar el mouse
-            empty='none'    # No se deselecciona al quitar el mouse (puedes cambiar a 'all' si quieres)
-        )
+        # 1. Crear una selección múltiple vinculada a la leyenda
+        selection = alt.selection_multi(fields=['NivelEducativo'], bind='legend')
 
-        # 2. Definir el gráfico base (líneas + puntos)
-        base_lines = alt.Chart(timeline_data).mark_line(point=True).encode(
-            x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
-            y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
-            color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
-            tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
-        )
-        
-        # 3. Definir cómo reaccionan las líneas a la selección
-        chart3 = base_lines.encode(
-            # Si la línea está seleccionada (hover), tamaño 4. Si no, tamaño 2.
-            size=alt.condition(hover_selection, alt.value(4), alt.value(2)),
-            # Si la línea está seleccionada (hover), opacidad 1.0. Si no, opacidad 0.3.
-            opacity=alt.condition(hover_selection, alt.value(1.0), alt.value(0.3))
-        ).add_params(
-            hover_selection # Añadir la selección al gráfico
-        ).properties(
-            width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)"
+        chart3 = (
+            alt.Chart(timeline_data)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
+                y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
+                color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
+                # 2. La opacidad depende de la selección (1.0 si está seleccionado, 0.2 si no)
+                opacity=alt.condition(selection, alt.value(1.0), alt.value(0.2)),
+                tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
+            )
+            .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
+            # 3. Añadir la selección al gráfico
+            .add_params(selection)
         )
 
 
@@ -227,7 +218,7 @@ if assets is not None:
         st.altair_chart(assets.chart3, use_container_width=True)
         st.markdown("""
         Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios.
-        **¡Interactivo!** Pasa el mouse sobre una línea para destacarla.
+        **¡Interactivo!** Haz clic en los elementos de la leyenda (ej. "Secundario") para filtrar las líneas.
         """) # ¡Texto actualizado!
 
     if assets.chart2:
@@ -288,7 +279,7 @@ if assets is not None:
         with col2:
             st.subheader("Variables Numéricas")
             inputs['HorasTrabajoPromedio'] = st.number_input("Horas de Trabajo Promedio", min_value=0.0, max_value=80.0, value=40.0, step=0.1, key="main_horas")
-            inputs['TasaActividadPonderada'] = st.slider("Tasa de Actividad Ponderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="main_actividad")
+            inputs['TasaActividadPonderada'] = st.slider("Tasa de ActividadPonderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="main_actividad")
             inputs['TasaEmpleoPonderada'] = st.slider("Tasa de Empleo Ponderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="main_empleo")
             inputs['Poblacion'] = st.number_input("Población del Segmento", min_value=0, max_value=100000, value=1000, step=100, key="main_poblacion")
 
