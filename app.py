@@ -2,12 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt 
 import joblib 
-import numpy as np
-import lime
-import lime.lime_tabular
 from sklearn.model_selection import train_test_split 
 from dataclasses import dataclass
-from scipy.stats import percentileofscore
 
 # --- Definición de la Estructura de Activos ---
 @dataclass
@@ -52,7 +48,7 @@ def load_app_assets() -> AppAssets | None:
         return None
     
     try:
-        # --- Gráfico 1: Pirámide (Sin cambios) ---
+        # --- Gráfico 1: Pirámide ---
         pir = (
             df_clean.groupby(["NivelEducativo","Sexo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
@@ -78,7 +74,7 @@ def load_app_assets() -> AppAssets | None:
         )
         chart1 = (base + text).resolve_scale(x="shared")
 
-        # --- Gráfico 2: Panel Brushing (Sin cambios) ---
+        # --- Gráfico 2: Panel Brushing ---
         brush = alt.selection_interval(encodings=["x","y"])
         scatter = (
             alt.Chart(df_clean)
@@ -105,15 +101,11 @@ def load_app_assets() -> AppAssets | None:
         )
         chart2 = scatter & bars
 
-        # --- Gráfico 3: Timeline (¡MEJORADO!) ---
+        # --- Gráfico 3: Timeline ---
         timeline_data = (
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
         )
-        
-        # 1. Crear selección de leyenda clicable
-        selection = alt.selection_multi(fields=['NivelEducativo'], bind='legend')
-
         chart3 = (
             alt.Chart(timeline_data)
             .mark_line(point=True)
@@ -121,12 +113,10 @@ def load_app_assets() -> AppAssets | None:
                 x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
                 y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
-                # 2. La opacidad depende de la selección
-                opacity=alt.condition(selection, alt.value(1.0), alt.value(0.2)),
                 tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
             )
             .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
-            .add_params(selection) # 3. Añadir la selección al gráfico
+            .interactive()
         )
 
     except Exception as e:
@@ -134,10 +124,9 @@ def load_app_assets() -> AppAssets | None:
         chart1, chart2, chart3 = None, None, None
     
     try:
-        # Extraer listas únicas ordenadas
-        niveles_educativos = sorted(df_clean['NivelEducativo'].unique().tolist())
-        rangos_etarios = sorted(df_clean['RangoEtario'].unique().tolist())
-        sexos = sorted(df_clean['Sexo'].unique().tolist())
+        niveles_educativos = df_clean['NivelEducativo'].unique().tolist()
+        rangos_etarios = df_clean['RangoEtario'].unique().tolist()
+        sexos = df_clean['Sexo'].unique().tolist()
         
         CATEGORICAL_FEATURES = ['NivelEducativo', 'RangoEtario', 'Sexo']
         NUMERIC_FEATURES = ['HorasTrabajoPromedio', 'TasaActividadPonderada', 'TasaEmpleoPonderada', 'Poblacion']
@@ -181,110 +170,84 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-@st.cache_resource
-def create_lime_explainer(x_test_df, features_list):
-    """
-    Crea y cachea un explicador LIME Tabular.
-    """
-    categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
-    try:
-        categorical_features_indices = [
-            features_list.index(col) for col in categorical_features_names
-        ]
-    except ValueError as e:
-        st.error(f"Error en LIME: La columna {e} no se encuentra en FEATURES.")
-        return None
-
-    try:
-        explainer = lime.lime_tabular.LimeTabularExplainer(
-            training_data=x_test_df.values, # LIME usa numpy array
-            feature_names=features_list,
-            class_names=['IngresoPromedio'],
-            categorical_features=categorical_features_indices,
-            mode='regression',
-            random_state=42 # Para reproducibilidad
-        )
-        return explainer
-    except Exception as e:
-        st.error(f"Error al inicializar LIME: {e}")
-        return None
-
 # --- Cargar todo ---
+# Ahora solo tenemos dos variables principales: assets y model
 assets = load_app_assets()
 model = load_model()
 
-# ¡NUEVO! - Llamar a la función con argumentos hashables
-explainer = None
-if assets is not None:
-    explainer = create_lime_explainer(assets.X_test, assets.FEATURES)
+# --- Barra Lateral (Sidebar) ---
+st.sidebar.title("Probar el Modelo (Ridge Regression)")
+st.sidebar.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
 
-# --- Barra Lateral (Sidebar) (¡REDUCIDA!) ---
-st.sidebar.title("Proyecto Integrador")
-st.sidebar.markdown("""
-Esta aplicación demuestra la integración de un modelo de *Machine Learning* (Ridge Regression) con visualizaciones interactivas de datos 
-socioeconómicos del Gran Mendoza.
-""")
+if model is None:
+    st.sidebar.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
+elif assets is not None:
+    inputs = {}
+    st.sidebar.header("Variables Categóricas")
+    # Usamos los 'assets' para poblar los selectbox
+    inputs['NivelEducativo'] = st.sidebar.selectbox("Nivel Educativo", options=assets.niveles_educativos)
+    inputs['RangoEtario'] = st.sidebar.selectbox("Rango Etario", options=assets.rangos_etarios)
+    inputs['Sexo'] = st.sidebar.selectbox("Sexo", options=assets.sexos)
 
-if model is None or assets is None:
-    st.sidebar.error(
-        "Error crítico al cargar datos o modelo. "
-        "La funcionalidad de la app estará limitada."
-    )
-else:
-    st.sidebar.info(
-        "La herramienta de predicción interactiva se encuentra en la pestaña "
-        "**'🤖 Predicción e Interpretabilidad'**."
-    )
+    st.sidebar.header("Variables Numéricas")
+    inputs['HorasTrabajoPromedio'] = st.sidebar.number_input("Horas de Trabajo Promedio", min_value=0.0, max_value=80.0, value=40.0, step=0.1)
+    inputs['TasaActividadPonderada'] = st.sidebar.slider("Tasa de Actividad Ponderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+    inputs['TasaEmpleoPonderada'] = st.sidebar.slider("Tasa de Empleo Ponderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+    inputs['Poblacion'] = st.sidebar.number_input("Población del Segmento", min_value=0, max_value=100000, value=1000, step=100)
+
+    if st.sidebar.button("Predecir Ingreso Promedio"):
+        # Usamos 'assets.FEATURES' para asegurar el orden de las columnas
+        input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Datos de Entrada:")
+        st.sidebar.dataframe(input_df)
+        
+        try:
+            prediction = model.predict(input_df)
+            st.sidebar.subheader("Resultado de la Predicción:")
+            st.sidebar.success(f"Ingreso Promedio Estimado: **${prediction[0]:,.2f}**")
+        except Exception as e:
+            st.sidebar.error(f"Error al predecir: {e}")
 
 # --- Cuerpo Principal ---
 st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
 
-# Todo el cuerpo de la app depende de que 'assets' y 'model' se hayan cargado
-if assets is not None and model is not None:
+# Todo el cuerpo de la app depende de que 'assets' se haya cargado
+if assets is not None:
     st.markdown(f"""
     Bienvenido al dashboard del proyecto. Esta aplicación integra los hallazgos de las entregas anteriores.
     - **Modelo Predictivo:** `Ridge Regression` (R² Test: 0.680, RMSE Test: $21,102.53)
     - **Datos:** `Tabla_Final.csv` ({len(assets.df)} segmentos analizados)
     """)
 
-    # --- Creación de Pestañas (¡NUEVO!) ---
-    tab1_viz, tab2_model = st.tabs([
-        "📈 Visualizaciones Exploratorias", 
-        "🤖 Predicción e Interpretabilidad"
-    ])
+    st.header("1. Visualizaciones Interactivas (Altair)")
 
-    # --- Pestaña 1: Visualizaciones (Contenido existente) ---
-    with tab1_viz:
-        st.header("1. Visualizaciones Interactivas (Altair)")
+    if assets.chart1:
+        st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
+        st.altair_chart(assets.chart1, use_container_width=True) 
+        st.markdown("""
+        Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
+        """) 
 
-        if assets.chart1:
-            st.subheader("Pirámide Educativa de Ingresos y Brecha de Género")
-            st.altair_chart(assets.chart1, use_container_width=True) 
-            st.markdown("""
-            Este gráfico compara el ingreso promedio (USD) entre varones y mujeres para cada nivel educativo...
-            """) 
+    if assets.chart3:
+        st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
+        st.altair_chart(assets.chart3, use_container_width=True)
+        st.markdown("""
+        Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios...
+        """)
 
-        if assets.chart3:
-            st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
-            st.altair_chart(assets.chart3, use_container_width=True)
-            st.markdown("""
-            Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios. 
-            **¡Interactivo!** Haz clic en los elementos de la leyenda (ej. "Secundario") para filtrar las líneas.
-            """)
+    if assets.chart2:
+        st.subheader("Panel Interactivo: Ingreso vs. Horas de Trabajo y Nivel Educativo")
+        st.altair_chart(assets.chart2, use_container_width=True)
+        st.markdown("""
+        Este panel doble permite una **exploración interactiva**... **Instrucción:** Use el mouse para **seleccionar un área rectangular**...
+        """)
 
-        if assets.chart2:
-            st.subheader("Panel Interactivo: Ingreso vs. Horas de Trabajo y Nivel Educativo")
-            st.altair_chart(assets.chart2, use_container_width=True)
-            st.markdown("""
-            Este panel doble permite una **exploración interactiva**... **Instrucción:** Use el mouse para **seleccionar un área rectangular**...
-            """)
-        
-        st.divider()
+    st.header("2. Evaluación del Modelo de Regresión")
+    st.subheader("Valores Reales vs. Valores Predichos (Datos de Test)")
+    st.markdown("Esta visualización (creada con el conjunto de *test*) compara el ingreso real (Eje Y) con el ingreso que nuestro modelo predijo (Eje X).")
 
-        st.header("2. Evaluación del Modelo de Regresión")
-        st.subheader("Valores Reales vs. Valores Predichos (Datos de Test)")
-        st.markdown("Esta visualización (creada con el conjunto de *test*) compara el ingreso real (Eje Y) con el ingreso que nuestro modelo predijo (Eje X).")
-
+    if model is not None:
         # Predecimos usando los datos de test cacheados en 'assets'
         y_test_pred = model.predict(assets.X_test)
         
@@ -293,186 +256,33 @@ if assets is not None and model is not None:
             'Ingreso Predicho (y_pred)': y_test_pred
         })
         
-        chart_pred = alt.Chart(plot_data).mark_circle(size=60, opacity=0.5).encode(
+        # Gráfico de dispersión
+        chart_pred = alt.Chart(plot_data).mark_circle(size=60).encode(
             x=alt.X('Ingreso Predicho (y_pred)', title='Ingreso Predicho (ARS)', scale=alt.Scale(zero=False)),
             y=alt.Y('Ingreso Real (y_test)', title='Ingreso Real (ARS)', scale=alt.Scale(zero=False)),
             tooltip=[alt.Tooltip('Ingreso Real (y_test)', format=',.2f'), alt.Tooltip('Ingreso Predicho (y_pred)', format=',.2f')]
         ).interactive()
         
+        # 1. Calcular dinámicamente el rango para la línea
         min_val = min(plot_data['Ingreso Real (y_test)'].min(), plot_data['Ingreso Predicho (y_pred)'].min())
         max_val = max(plot_data['Ingreso Real (y_test)'].max(), plot_data['Ingreso Predicho (y_pred)'].max())
+        
+        # 2. Crear el DataFrame para la línea usando esos valores
         line_df = pd.DataFrame({'x': [min_val, max_val], 'y': [min_val, max_val]})
+        
+        # 3. Crear la línea usando el nuevo line_df
         line = alt.Chart(line_df).mark_line(color='red', strokeDash=[5,5]).encode(x='x', y='y')
         
+        # Combinar el gráfico de dispersión + la línea
         st.altair_chart(chart_pred + line, use_container_width=True)
-        st.markdown("Idealmente, los puntos deberían caer sobre la **línea roja** (predicción perfecta).")
+        st.markdown(" idealmente, los puntos deberían caer sobre la **línea roja** (predicción perfecta).")
     
-        st.divider()
-
-        st.header("3. Exploración de los Datos Completos")
-        with st.expander("Ver y Filtrar la 'Tabla_Final' completa", expanded=False):
-            st.dataframe(assets.df)
-            st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
-
-    # --- Pestaña 2: Modelo Interactivo (¡NUEVO!) ---
-    with tab2_model:
-        st.header("Probar el Modelo (Ridge Regression)")
-        st.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio y entender qué variables influyen más.")
-        
-        st.info("Prueba cargando un perfil aleatorio del conjunto de datos de testeo para ver cómo funciona.")
-        
-        # Botón para cargar datos aleatorios
-        if st.button("Cargar segmento aleatorio de Test"):
-            sample = assets.X_test.sample(1).iloc[0].to_dict()
-            st.session_state.sample_data = sample
-        
-        st.divider()
-
-        inputs = {}
-        col1, col2 = st.columns(2)
-
-        # --- Columna 1: Variables Categóricas ---
-        with col1:
-            st.subheader("Variables Categóricas")
-
-            # Nivel Educativo
-            default_nivel_idx = 0
-            if st.session_state.sample_data:
-                default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
-            inputs['NivelEducativo'] = st.selectbox(
-                "Nivel Educativo", 
-                options=assets.niveles_educativos, 
-                index=default_nivel_idx,
-                help="Máximo nivel educativo alcanzado por el segmento."
-            )
-
-            # Rango Etario
-            default_rango_idx = 0
-            if st.session_state.sample_data:
-                default_rango_idx = assets.rangos_etarios.index(st.session_state.sample_data['RangoEtario'])
-            inputs['RangoEtario'] = st.selectbox(
-                "Rango Etario", 
-                options=assets.rangos_etarios,
-                index=default_rango_idx,
-                help="Grupo de edad al que pertenece el segmento."
-            )
-
-            # Sexo
-            default_sexo_idx = 0
-            if st.session_state.sample_data:
-                default_sexo_idx = assets.sexos.index(st.session_state.sample_data['Sexo'])
-            inputs['Sexo'] = st.selectbox(
-                "Sexo", 
-                options=assets.sexos,
-                index=default_sexo_idx,
-                help="Sexo del segmento."
-            )
-
-        # --- Columna 2: Variables Numéricas ---
-        with col2:
-            st.subheader("Variables Numéricas")
-
-            # Horas Trabajo
-            default_horas = 40.0
-            if st.session_state.sample_data:
-                default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
-            inputs['HorasTrabajoPromedio'] = st.number_input(
-                "Horas de Trabajo Promedio", 
-                min_value=0.0, max_value=80.0, value=default_horas, step=0.1,
-                help="Promedio de horas semanales trabajadas por el segmento."
-            )
-
-            # Tasa Actividad
-            default_actividad = 0.5
-            if st.session_state.sample_data:
-                default_actividad = st.session_state.sample_data['TasaActividadPonderada']
-            inputs['TasaActividadPonderada'] = st.slider(
-                "Tasa de Actividad Ponderada", 
-                min_value=0.0, max_value=1.0, value=default_actividad, step=0.01,
-                help="Porcentaje de la población del segmento que está activa (trabaja o busca trabajo)."
-            )
-
-            # Tasa Empleo
-            default_empleo = 0.5
-            if st.session_state.sample_data:
-                default_empleo = st.session_state.sample_data['TasaEmpleoPonderada']
-            inputs['TasaEmpleoPonderada'] = st.slider(
-                "Tasa de Empleo Ponderada", 
-                min_value=0.0, max_value=1.0, value=default_empleo, step=0.01,
-                help="Porcentaje de la población del segmento que está empleada."
-            )
-
-            # Poblacion
-            default_poblacion = 1000
-            if st.session_state.sample_data:
-                default_poblacion = int(st.session_state.sample_data['Poblacion'])
-            inputs['Poblacion'] = st.number_input(
-                "Población del Segmento", 
-                min_value=0, max_value=100000, value=default_poblacion, step=100,
-                help="Número de personas en este segmento."
-            )
-
-        st.divider()
-
-        # --- Botón de Predicción y Resultados ---
-        if st.button("Predecir Ingreso Promedio", type="primary"):
-            # Usamos 'assets.FEATURES' para asegurar el orden de las columnas
-            input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
-            
-            try:
-                # 1. Hacer la predicción
-                prediction = model.predict(input_df)
-                prediction_value = prediction[0]
-                
-                st.subheader("Resultado de la Predicción:")
-                st.success(f"Ingreso Promedio Estimado: **${prediction_value:,.2f} ARS**")
-
-                # 2. Calcular el Percentil (¡NUEVO!)
-                st.subheader("Posicionamiento del Ingreso")
-                
-                # Filtrar el DF original por las características categóricas
-                mask = (
-                    (assets.df['NivelEducativo'] == inputs['NivelEducativo']) &
-                    (assets.df['RangoEtario'] == inputs['RangoEtario']) &
-                    (assets.df['Sexo'] == inputs['Sexo'])
-                )
-                subset_df = assets.df[mask]
-                
-                if not subset_df.empty:
-                    all_ingresos = subset_df['IngresoPromedio'].values
-                    # Calcular en qué percentil cae el ingreso predicho
-                    p = percentileofscore(all_ingresos, prediction_value)
-                    st.info(f"Este ingreso te ubicaría en el **percentil {p:.0f}** dentro de todos los segmentos con las mismas características (Nivel Educativo, Rango Etario y Sexo).")
-                else:
-                    st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
-
-                # 3. Explicación con LIME (¡NUEVO!)
-                st.subheader("🔍 ¿Por qué este resultado? (Interpretación LIME)")
-                st.markdown("""
-                Este gráfico muestra cuánto 'sumó' (verde) o 'restó' (rojo) cada
-                variable para llegar al resultado final, comparado con el promedio.
-                """)
-                
-                if explainer is not None:
-                    # LIME necesita un array de numpy
-                    input_array = input_df.iloc[0].values 
-                    
-                    # Generar la explicación
-                    exp = explainer.explain_instance(
-                        data_row=input_array, 
-                        predict_fn=model.predict, # Le pasamos la función de predicción del pipeline
-                        num_features=len(assets.FEATURES)
-                    )
-
-                    # Mostrar la explicación como un gráfico de matplotlib
-                    fig = exp.as_pyplot_figure()
-                    st.pyplot(fig, use_container_width=True)
-                else:
-                    st.error("El explicador LIME no pudo ser inicializado.")
-
-            except Exception as e:
-                st.error(f"Error al predecir o explicar: {e}")
+    st.header("3. Exploración de los Datos Completos")
+    with st.expander("Ver y Filtrar la 'Tabla_Final' completa", expanded=False):
+        # Usamos 'assets.df' para mostrar el dataframe
+        st.dataframe(assets.df)
+        st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
 else:
-    # Este es el 'else' principal que se activa si 'assets' o 'model' es None
-    st.error("No se pudieron cargar los datos ('Tabla_Final.csv') o el modelo ('modelo_ridge.pkl'). La aplicación no puede iniciarse.")
+    # Este es el 'else' principal que se activa si 'assets' es None
+    st.error("No se pudieron cargar los datos ('Tabla_Final.csv'). La aplicación no puede mostrar contenido.")
