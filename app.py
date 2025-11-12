@@ -6,6 +6,7 @@ import numpy as np
 import lime
 import lime.lime_tabular
 from sklearn.model_selection import train_test_split 
+from sklearn.preprocessing import OrdinalEncoder # <-- ¡NUEVO IMPORTE!
 from dataclasses import dataclass
 from scipy.stats import percentileofscore
 
@@ -186,48 +187,12 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-# --- ¡FUNCIÓN LIME CORREGIDA (DE NUEVO)! ---
-@st.cache_resource
-def create_lime_explainer(x_test_df, features_list):
-    """
-    Crea y cachea un explicador LIME Tabular.
-    """
-    try:
-        # ÍNDICES de las columnas categóricas (esto está bien)
-        categorical_features_indices = [
-            features_list.index(col) for col in ['NivelEducativo', 'RangoEtario', 'Sexo']
-        ]
-        
-        explainer = lime.lime_tabular.LimeTabularExplainer(
-            # --- ¡EL CAMBIO CLAVE! ---
-            # Le pasamos el DataFrame de Pandas, NO el array .values
-            # Esto permite a LIME leer los dtypes (tipos) de cada columna
-            training_data=x_test_df, 
-            
-            feature_names=features_list,
-            class_names=['IngresoPromedio'],
-            
-            # Le seguimos pasando los ÍNDICES (esto es robusto)
-            categorical_features=categorical_features_indices,
-            
-            # Mantenemos esto, es buena práctica
-            discretize_continuous=False, 
-            
-            mode='regression'
-        )
-        return explainer
-    except Exception as e:
-        st.error(f"Error al inicializar LIME: {e}")
-        return None
+# --- Función LIME ELIMINADA ---
+# La crearemos al vuelo
 
 # --- Cargar todo ---
 assets = load_app_assets()
 model = load_model()
-
-# --- Cargar el explicador LIME ---
-explainer = None
-if assets is not None and model is not None:
-    explainer = create_lime_explainer(assets.X_test, assets.FEATURES)
 
 # --- Inicializar Session State ---
 if 'sample_data' not in st.session_state:
@@ -313,9 +278,6 @@ if assets is not None:
 
         if model is None:
             st.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
-        elif explainer is None: 
-            # Si 'explainer' es None (por el error anterior), lo mostramos aquí
-            st.error("El explicador del modelo (LIME) no pudo cargarse. Revisa los logs.")
         else:
             st.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
             
@@ -331,7 +293,7 @@ if assets is not None:
 
             with col1:
                 st.subheader("Variables Categóricas")
-                
+                # ... (Inputs no cambian) ...
                 default_nivel_idx = 0
                 if st.session_state.sample_data:
                     default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
@@ -364,7 +326,7 @@ if assets is not None:
 
             with col2:
                 st.subheader("Variables Numéricas")
-
+                # ... (Inputs no cambian) ...
                 default_horas = 40.0
                 if st.session_state.sample_data:
                     default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
@@ -432,7 +394,7 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (CORREGIDA) ---
+                    # --- 3. ¡NUEVA LÓGICA LIME (El "Traductor")! ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     st.markdown("""
                     Este gráfico explica **por qué** el modelo dio ese resultado.
@@ -440,17 +402,73 @@ if assets is not None:
                     - **Barras Rojas:** Variables que **disminuyeron** la predicción.
                     """)
                     
-                    # --- ¡CAMBIO 3! ---
-                    # Le pasamos la fila como un array 1D de numpy.
-                    # Esto está bien, LIME lo espera.
-                    input_array = input_df.iloc[0].values
+                    # Paso A: Crear el "Mundo Numérico" para LIME
                     
+                    # 1. Definimos las columnas categóricas
+                    categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
+                    categorical_features_indices = [assets.FEATURES.index(col) for col in categorical_features_names]
+                    
+                    # 2. Creamos un "codificador" que convertirá strings a números
+                    # (ej. Primario=0, Secundario=1...)
+                    # Usamos las listas de 'assets' para asegurar el orden
+                    encoder = OrdinalEncoder(categories=[
+                        assets.niveles_educativos, 
+                        assets.rangos_etarios, 
+                        assets.sexos
+                    ])
+                    
+                    # 3. Codificamos los datos de entrenamiento de LIME
+                    # Primero, 'fiteamos' el codificador en las columnas categóricas de X_test
+                    encoder.fit(assets.X_test[categorical_features_names])
+                    
+                    # Luego, transformamos X_test a un formato numérico
+                    X_test_encoded = assets.X_test.copy()
+                    X_test_encoded[categorical_features_names] = encoder.transform(assets.X_test[categorical_features_names])
+                    
+                    # 4. Creamos el Explicador LIME. Ahora SÍ funcionará.
+                    explainer = lime.lime_tabular.LimeTabularExplainer(
+                        training_data=X_test_encoded.values, # ¡Datos 100% numéricos!
+                        feature_names=assets.FEATURES,
+                        class_names=['IngresoPromedio'],
+                        categorical_features=categorical_features_indices,
+                        discretize_continuous=False,
+                        mode='regression'
+                    )
+
+                    # Paso B: Crear la función "Traductora" (Wrapper)
+                    
+                    def predict_fn_wrapper(rows_encoded):
+                        # Esta función recibe filas NUMÉRICAS de LIME
+                        # 1. Convertimos las filas numéricas a un DataFrame
+                        df_encoded = pd.DataFrame(rows_encoded, columns=assets.FEATURES)
+                        
+                        # 2. Creamos una copia para decodificar
+                        df_decoded = df_encoded.copy()
+                        
+                        # 3. Usamos el 'encoder' para "traducir" de vuelta a strings
+                        df_decoded[categorical_features_names] = encoder.inverse_transform(
+                            df_encoded[categorical_features_names].astype(int)
+                        )
+                        
+                        # 4. Le pasamos el DataFrame con strings al modelo
+                        # El modelo ahora está feliz
+                        return model.predict(df_decoded)
+
+                    # Paso C: Explicar la predicción actual
+                    
+                    # 1. Codificamos también la fila de input del usuario
+                    input_df_encoded = input_df.copy()
+                    input_df_encoded[categorical_features_names] = encoder.transform(input_df[categorical_features_names])
+                    input_array_encoded = input_df_encoded.iloc[0].values
+
+                    # 2. Llamamos a LIME
                     exp = explainer.explain_instance(
-                        data_row=input_array, 
-                        predict_fn=model.predict, 
+                        data_row=input_array_encoded, # Le pasamos la fila numérica
+                        predict_fn=predict_fn_wrapper, # Le pasamos nuestro "traductor"
                         num_features=len(assets.FEATURES)
                     )
 
+                    # 3. Mostramos el gráfico
                     fig = exp.as_pyplot_figure()
                     st.pyplot(fig, use_container_width=True)
 
