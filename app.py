@@ -186,40 +186,34 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-# --- ¡NUEVA FUNCIÓN PARA LIME! ---
+# --- ¡FUNCIÓN LIME CORREGIDA (DE NUEVO)! ---
 @st.cache_resource
 def create_lime_explainer(x_test_df, features_list):
     """
     Crea y cachea un explicador LIME Tabular.
-    Usamos X_test como datos de entrenamiento para LIME.
     """
     try:
-        # Nombres de las columnas categóricas
-        categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
-        # ÍNDICES de las columnas categóricas
+        # ÍNDICES de las columnas categóricas (esto está bien)
         categorical_features_indices = [
-            features_list.index(col) for col in categorical_features_names
+            features_list.index(col) for col in ['NivelEducativo', 'RangoEtario', 'Sexo']
         ]
         
         explainer = lime.lime_tabular.LimeTabularExplainer(
-            # --- ¡CAMBIO 1! ---
-            # Volvemos a usar .values (array de NumPy)
-            training_data=x_test_df.values, 
+            # --- ¡EL CAMBIO CLAVE! ---
+            # Le pasamos el DataFrame de Pandas, NO el array .values
+            # Esto permite a LIME leer los dtypes (tipos) de cada columna
+            training_data=x_test_df, 
             
             feature_names=features_list,
-            class_names=['IngresoPromedio'], # Nombre de lo que predecimos
+            class_names=['IngresoPromedio'],
             
-            # --- ¡CAMBIO 2! ---
-            # Volvemos a usar los ÍNDICES
+            # Le seguimos pasando los ÍNDICES (esto es robusto)
             categorical_features=categorical_features_indices,
             
-            # --- ¡CAMBIO 3! (LA CLAVE) ---
-            # Le decimos a LIME que NO intente discretizar (convertir)
-            # las features. Esto evita el error 'could not convert string to float'
-            # y también el error de 'slice'.
+            # Mantenemos esto, es buena práctica
             discretize_continuous=False, 
             
-            mode='regression' # ¡Importante! Le decimos que es un problema de regresión
+            mode='regression'
         )
         return explainer
     except Exception as e:
