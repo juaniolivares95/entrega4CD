@@ -267,7 +267,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL CON ÉNFASIS EN GRÁFICO!) ---
+# --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL CON ÉNFASIS EN GRÁFICO!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -389,7 +389,7 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (¡CON GRÁFICO GRANDE A LA IZQUIERDA!) ---
+                    # --- 3. INTERPRETACIÓN LIME (¡CON LAYOUT!) ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
@@ -441,13 +441,15 @@ if assets is not None:
                         num_features=5 
                     )
                     
-                    # --- ¡NUEVO LAYOUT: GRÁFICO (2/3) A LA IZQUIERDA, TEXTO (1/3) A LA DERECHA! ---
-                    # Ajustamos las proporciones: la primera columna (gráfico) es el doble de grande que la segunda (texto)
+                    # --- ¡CORRECCIÓN AQUÍ! ---
+                    # Definimos exp_list ANTES de usarlo en las columnas
+                    exp_list = exp.as_list() 
+                    
                     col_chart, col_text = st.columns([2, 1]) 
 
                     with col_chart:
                         # --- GRÁFICO SUTIL CON ALTAIR (Más grande) ---
-                        st.markdown("#### Factores de la Predicción") # Título más simple para el gráfico
+                        st.markdown("#### Factores de la Predicción")
                         
                         lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
                         lime_data['Impacto'] = lime_data['Peso'].apply(lambda x: 'Positivo' if x > 0 else 'Negativo')
@@ -463,7 +465,6 @@ if assets is not None:
                                            ),
                             tooltip=['Factor', alt.Tooltip('Peso', format=',.0f')]
                         ).properties(
-                            # Aumentamos la altura para que ocupe más espacio
                             height=300 
                         ).interactive()
 
@@ -475,8 +476,6 @@ if assets is not None:
                         st.markdown("""
                         Los siguientes factores fueron clave para la estimación del ingreso:
                         """)
-                        
-                        exp_list = exp.as_list() # Ya la tenemos, no es necesario volver a calcularla
                         
                         positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
                         negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
