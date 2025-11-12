@@ -186,35 +186,43 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-# --- ¡FUNCIÓN LIME CORREGIDA! ---
+# --- ¡NUEVA FUNCIÓN PARA LIME! ---
 @st.cache_resource
 def create_lime_explainer(x_test_df, features_list):
     """
-    Carga el CSV, limpia los datos, genera los gráficos de Altair y prepara
-    los datos para el modelo. Retorna un objeto AppAssets o None si falla.
+    Crea y cachea un explicador LIME Tabular.
+    Usamos X_test como datos de entrenamiento para LIME.
     """
     try:
         # Nombres de las columnas categóricas
         categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
+        # ÍNDICES de las columnas categóricas
+        categorical_features_indices = [
+            features_list.index(col) for col in categorical_features_names
+        ]
         
         explainer = lime.lime_tabular.LimeTabularExplainer(
             # --- ¡CAMBIO 1! ---
-            # Le pasamos el DataFrame de Pandas, no el array de numpy.
-            # LIME es más inteligente al leer un DataFrame.
-            training_data=x_test_df, 
+            # Volvemos a usar .values (array de NumPy)
+            training_data=x_test_df.values, 
             
             feature_names=features_list,
-            class_names=['IngresoPromedio'], 
+            class_names=['IngresoPromedio'], # Nombre de lo que predecimos
             
             # --- ¡CAMBIO 2! ---
-            # Le pasamos la lista de NOMBRES de las columnas categóricas.
-            categorical_features=categorical_features_names,
+            # Volvemos a usar los ÍNDICES
+            categorical_features=categorical_features_indices,
             
-            mode='regression'
+            # --- ¡CAMBIO 3! (LA CLAVE) ---
+            # Le decimos a LIME que NO intente discretizar (convertir)
+            # las features. Esto evita el error 'could not convert string to float'
+            # y también el error de 'slice'.
+            discretize_continuous=False, 
+            
+            mode='regression' # ¡Importante! Le decimos que es un problema de regresión
         )
         return explainer
     except Exception as e:
-        # Esto ahora mostrará el error real si vuelve a fallar
         st.error(f"Error al inicializar LIME: {e}")
         return None
 
