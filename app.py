@@ -35,7 +35,6 @@ st.set_page_config(
 # --- Carga de Datos, Modelo y Gráficos ---
 @st.cache_data
 def load_app_assets() -> AppAssets | None:
-    # ... (Esta función no cambia, la omito por brevedad) ...
     try:
         df = pd.read_csv('Tabla_Final.csv')
     except FileNotFoundError:
@@ -52,7 +51,7 @@ def load_app_assets() -> AppAssets | None:
         y_sort_order = ["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]
         y_axis_definition = alt.Y("NivelEducativo:N", sort=y_sort_order, title="Nivel Educativo")
 
-        # --- Gráfico 1: Pirámide (Mejorado) ---
+        # --- Gráfico 1: Pirámide ---
         pir = (
             df_clean.groupby(["NivelEducativo","Sexo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
@@ -88,7 +87,7 @@ def load_app_assets() -> AppAssets | None:
         )
         chart1 = (base + text_varon + text_mujer).resolve_scale(x="shared")
 
-        # --- Gráfico 2: Panel Brushing (Sin cambios) ---
+        # --- Gráfico 2: Panel Brushing  ---
         brush = alt.selection_interval(encodings=["x","y"])
         scatter = (
             alt.Chart(df_clean)
@@ -115,7 +114,7 @@ def load_app_assets() -> AppAssets | None:
         )
         chart2 = scatter & bars
 
-        # --- Gráfico 3: Timeline (Clic en Leyenda) ---
+        # --- Gráfico 3: Timeline ---
         timeline_data = (
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
@@ -214,7 +213,6 @@ if assets is not None:
 
     # --- Pestaña 1: Contenido de Visualizaciones ---
     with tab1_viz:
-        # ... (Esta sección no cambia) ...
         st.header("1. Visualizaciones Interactivas (Altair)")
 
         if assets.chart1:
@@ -269,8 +267,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL!) ---
-    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL PULIDA!) ---
+    # --- Pestaña 2: Contenido del Predictor (¡CON GRÁFICO LIME SUTIL!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -392,19 +389,17 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (¡MEJORA FINAL!) ---
+                    # --- 3. INTERPRETACIÓN LIME (¡CON GRÁFICO ALTAIR!) ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
                     categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
                     categorical_features_indices = [assets.FEATURES.index(col) for col in categorical_features_names]
                     
-                    # --- ¡MEJORA DE LEGIBILIDAD! ---
-                    # 1. Creamos el "diccionario traductor" para LIME
                     categorical_names_map = {
-                        categorical_features_indices[0]: assets.niveles_educativos, # 'NivelEducativo'
-                        categorical_features_indices[1]: assets.rangos_etarios,    # 'RangoEtario'
-                        categorical_features_indices[2]: assets.sexos               # 'Sexo'
+                        categorical_features_indices[0]: assets.niveles_educativos,
+                        categorical_features_indices[1]: assets.rangos_etarios,
+                        categorical_features_indices[2]: assets.sexos
                     }
 
                     encoder = OrdinalEncoder(categories=[
@@ -422,11 +417,7 @@ if assets is not None:
                         feature_names=assets.FEATURES,
                         class_names=['IngresoPromedio'],
                         categorical_features=categorical_features_indices,
-                        
-                        # --- ¡MEJORA DE LEGIBILIDAD! ---
-                        # 2. Le pasamos el "diccionario traductor" a LIME
                         categorical_names=categorical_names_map, 
-                        
                         discretize_continuous=False,
                         mode='regression'
                     )
@@ -444,14 +435,14 @@ if assets is not None:
                     input_array_encoded = input_df_encoded.iloc[0].values
                     # (Fin de la lógica LIME)
 
-                    # Gráfico con 5 features
+                    # Pedimos a LIME las 5 features más importantes
                     exp = explainer.explain_instance(
                         data_row=input_array_encoded,
                         predict_fn=predict_fn_wrapper, 
                         num_features=5 
                     )
                     
-                    # --- ¡MEJORA DE EXPLICACIÓN (Sin Pesos)! ---
+                    # --- EXPLICACIÓN EN TEXTO (Sutil) ---
                     st.markdown("#### Análisis de Contribución")
                     st.markdown("""
                     A continuación, se muestran los 5 factores principales que el modelo usó para 
@@ -460,25 +451,50 @@ if assets is not None:
                     
                     exp_list = exp.as_list()
                     
-                    # ¡Quitamos los pesos (w)!
                     positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
                     negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
 
-                    # Mostramos los resúmenes limpios
                     if positive_features:
                         st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
-                    
                     if negative_features:
                         st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
-                    
                     if not positive_features and not negative_features:
                         st.info("No se identificaron factores de peso para esta predicción.")
 
-                    # --- ¡MEJORA DE TAMAÑO! ---
-                    fig = exp.as_pyplot_figure()
-                    # Definimos un tamaño (ancho, alto) más compacto
-                    fig.set_size_inches(10, 4) 
-                    st.pyplot(fig, use_container_width=True)
+                    # --- ¡NUEVO GRÁFICO SUTIL CON ALTAIR! ---
+                    
+                    # 1. Convertir los datos de LIME a un DataFrame
+                    lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
+                    
+                    # 2. Añadir una columna para el color (positivo/negativo)
+                    lime_data['Impacto'] = lime_data['Peso'].apply(lambda x: 'Positivo' if x > 0 else 'Negativo')
+                    
+                    # 3. Limpiar los strings de los factores para que se vean mejor
+                    lime_data['Factor'] = lime_data['Factor'].str.replace('=', ' = ', regex=False)
+                    
+                    # 4. Crear el gráfico de barras horizontales
+                    chart = alt.Chart(lime_data).mark_bar().encode(
+                        # El eje X es el peso (cuánto suma o resta)
+                        x=alt.X('Peso', title='Impacto en la Predicción (ARS)'),
+                        
+                        # El eje Y es el factor, ordenado por el peso
+                        y=alt.Y('Factor', title='Factor', sort='-x'),
+                        
+                        # El color depende de si es Positivo o Negativo
+                        color=alt.Color('Impacto', 
+                                        scale=alt.Scale(domain=['Positivo', 'Negativo'], 
+                                                        range=['#2ca02c', '#d62728']) # Verde y Rojo
+                                       ),
+                        
+                        # Tooltip para ver los detalles
+                        tooltip=['Factor', alt.Tooltip('Peso', format=',.0f')]
+                    ).properties(
+                        title='Factores Principales de la Predicción'
+                    ).interactive() # Hacemos el gráfico interactivo
+
+                    # 5. Mostrar el gráfico de Altair
+                    st.altair_chart(chart, use_container_width=True)
+
 
                 except Exception as e:
                     st.error(f"Error al predecir o interpretar: {e}")
