@@ -272,7 +272,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (¡MEJORADO!) ---
+   # --- Pestaña 2: Contenido del Predictor (¡CORREGIDO!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -281,10 +281,8 @@ if assets is not None:
         else:
             st.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
             
-            # --- MEJORA: Botón para cargar datos aleatorios ---
             st.info("Prueba cargando un perfil aleatorio del conjunto de datos de testeo para ver cómo funciona.")
             if st.button("Cargar segmento aleatorio de Test"):
-                # Tomamos una muestra aleatoria del X_test y la guardamos en el estado
                 sample = assets.X_test.sample(1).iloc[0].to_dict()
                 st.session_state.sample_data = sample
             
@@ -296,17 +294,15 @@ if assets is not None:
             with col1:
                 st.subheader("Variables Categóricas")
                 
-                # --- MEJORA: Cargar valor desde session_state o usar default ---
                 default_nivel_idx = 0
                 if st.session_state.sample_data:
-                    # Buscamos el índice que corresponde al valor guardado
                     default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
                 inputs['NivelEducativo'] = st.selectbox(
                     "Nivel Educativo", 
                     options=assets.niveles_educativos, 
-                    key="main_nivel",
-                    index=default_nivel_idx,
-                    help="Máximo nivel educativo alcanzado por el segmento." # <-- MEJORA: Explicación
+                    index=default_nivel_idx, # <--- ¡AHORA FUNCIONARÁ!
+                    help="Máximo nivel educativo alcanzado por el segmento." 
+                    # Se quitó: key="main_nivel"
                 )
 
                 default_rango_idx = 0
@@ -315,9 +311,9 @@ if assets is not None:
                 inputs['RangoEtario'] = st.selectbox(
                     "Rango Etario", 
                     options=assets.rangos_etarios, 
-                    key="main_rango",
-                    index=default_rango_idx,
-                    help="Grupo de edad al que pertenece el segmento." # <-- MEJORA: Explicación
+                    index=default_rango_idx, # <--- ¡AHORA FUNCIONARÁ!
+                    help="Grupo de edad al que pertenece el segmento."
+                    # Se quitó: key="main_rango"
                 )
 
                 default_sexo_idx = 0
@@ -326,22 +322,22 @@ if assets is not None:
                 inputs['Sexo'] = st.selectbox(
                     "Sexo", 
                     options=assets.sexos, 
-                    key="main_sexo",
-                    index=default_sexo_idx,
-                    help="Sexo del segmento." # <-- MEJORA: Explicación
+                    index=default_sexo_idx, # <--- ¡AHORA FUNCIONARÁ!
+                    help="Sexo del segmento."
+                    # Se quitó: key="main_sexo"
                 )
 
             with col2:
                 st.subheader("Variables Numéricas")
 
-                # --- MEJORA: Cargar valor desde session_state o usar default ---
                 default_horas = 40.0
                 if st.session_state.sample_data:
                     default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
                 inputs['HorasTrabajoPromedio'] = st.number_input(
                     "Horas de Trabajo Promedio", 
-                    min_value=0.0, max_value=80.0, value=default_horas, step=0.1, key="main_horas",
-                    help="Promedio de horas semanales trabajadas por el segmento." # <-- MEJORA: Explicación
+                    min_value=0.0, max_value=80.0, value=default_horas, step=0.1, 
+                    help="Promedio de horas semanales trabajadas por el segmento."
+                    # Se quitó: key="main_horas"
                 )
 
                 default_actividad = 0.5
@@ -349,8 +345,9 @@ if assets is not None:
                     default_actividad = st.session_state.sample_data['TasaActividadPonderada']
                 inputs['TasaActividadPonderada'] = st.slider(
                     "Tasa de Actividad Ponderada", 
-                    min_value=0.0, max_value=1.0, value=default_actividad, step=0.01, key="main_actividad",
-                    help="Porcentaje de la población del segmento que está activa (trabaja o busca trabajo)." # <-- MEJORA
+                    min_value=0.0, max_value=1.0, value=default_actividad, step=0.01, 
+                    help="Porcentaje de la población del segmento que está activa (trabaja o busca trabajo)."
+                    # Se quitó: key="main_actividad"
                 )
 
                 default_empleo = 0.5
@@ -358,8 +355,9 @@ if assets is not None:
                     default_empleo = st.session_state.sample_data['TasaEmpleoPonderada']
                 inputs['TasaEmpleoPonderada'] = st.slider(
                     "Tasa de Empleo Ponderada", 
-                    min_value=0.0, max_value=1.0, value=default_empleo, step=0.01, key="main_empleo",
-                    help="Porcentaje de la población del segmento que está empleada." # <-- MEJORA
+                    min_value=0.0, max_value=1.0, value=default_empleo, step=0.01, 
+                    help="Porcentaje de la población del segmento que está empleada."
+                    # Se quitó: key="main_empleo"
                 )
 
                 default_poblacion = 1000
@@ -367,11 +365,13 @@ if assets is not None:
                     default_poblacion = int(st.session_state.sample_data['Poblacion'])
                 inputs['Poblacion'] = st.number_input(
                     "Población del Segmento", 
-                    min_value=0, max_value=100000, value=default_poblacion, step=100, key="main_poblacion",
-                    help="Número de personas en este segmento." # <-- MEJORA
+                    min_value=0, max_value=100000, value=default_poblacion, step=100, 
+                    help="Número de personas en este segmento."
+                    # Se quitó: key="main_poblacion"
                 )
 
             if st.button("Predecir Ingreso Promedio", type="primary"):
+                # (El resto del código de predicción y percentil no cambia)
                 input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
                 st.markdown("---")
                 st.subheader("Datos de Entrada:")
@@ -379,15 +379,13 @@ if assets is not None:
                 
                 try:
                     prediction = model.predict(input_df)
-                    prediction_value = prediction[0] # Guardamos el valor
+                    prediction_value = prediction[0] 
                     
                     st.subheader("Resultado de la Predicción:")
                     st.success(f"Ingreso Promedio Estimado: **${prediction_value:,.2f}**")
                     
-                    # --- ¡NUEVO! Cálculo de Percentil ---
                     st.subheader("Análisis Comparativo")
                     
-                    # 1. Filtrar el DF original por las características categóricas
                     mask = (
                         (assets.df['NivelEducativo'] == inputs['NivelEducativo']) &
                         (assets.df['RangoEtario'] == inputs['RangoEtario']) &
@@ -396,10 +394,7 @@ if assets is not None:
                     subset_df = assets.df[mask]
 
                     if not subset_df.empty:
-                        # 2. Obtener la lista de ingresos reales de ese subgrupo
                         all_ingresos = subset_df['IngresoPromedio'].values
-                        
-                        # 3. Calcular en qué percentil cae el ingreso predicho
                         p = percentileofscore(all_ingresos, prediction_value)
                         
                         st.info(f"""
