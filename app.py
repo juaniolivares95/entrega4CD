@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 import altair as alt 
 import joblib 
+import numpy as np  # <-- ¡NUEVO IMPORTE!
+import lime         # <-- ¡NUEVO IMPORTE!
+import lime.lime_tabular
 from sklearn.model_selection import train_test_split 
 from dataclasses import dataclass
-from scipy.stats import percentileofscore  # <-- ¡NUEVO IMPORTE!
+from scipy.stats import percentileofscore
 
 # --- Definición de la Estructura de Activos ---
 @dataclass
@@ -29,7 +32,6 @@ st.set_page_config(
 )
 
 # --- Carga de Datos, Modelo y Gráficos ---
-# (Esta sección no cambia, la omito por brevedad...)
 @st.cache_data
 def load_app_assets() -> AppAssets | None:
     """
@@ -142,8 +144,6 @@ def load_app_assets() -> AppAssets | None:
         chart1, chart2, chart3 = None, None, None
     
     try:
-        # ¡IMPORTANTE! Ordenamos las listas para usarlas en los selectbox
-        # y para buscar los índices al cargar datos aleatorios
         niveles_educativos = sorted(df_clean['NivelEducativo'].unique().tolist())
         rangos_etarios = sorted(df_clean['RangoEtario'].unique().tolist())
         sexos = sorted(df_clean['Sexo'].unique().tolist())
@@ -189,12 +189,43 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
+# --- ¡NUEVA FUNCIÓN PARA LIME! ---
+@st.cache_resource
+def create_lime_explainer(x_test_df, features_list):
+    """
+    Crea y cachea un explicador LIME Tabular.
+    Usamos X_test como datos de entrenamiento para LIME.
+    """
+    try:
+        # LIME necesita saber cuáles columnas son categóricas
+        categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
+        categorical_features_indices = [
+            features_list.index(col) for col in categorical_features_names
+        ]
+        
+        explainer = lime.lime_tabular.LimeTabularExplainer(
+            training_data=x_test_df.values, # LIME usa numpy array
+            feature_names=features_list,
+            class_names=['IngresoPromedio'], # Nombre de lo que predecimos
+            categorical_features=categorical_features_indices,
+            mode='regression' # ¡Importante! Le decimos que es un problema de regresión
+        )
+        return explainer
+    except Exception as e:
+        st.error(f"Error al inicializar LIME: {e}")
+        return None
+
 # --- Cargar todo ---
 assets = load_app_assets()
 model = load_model()
 
-# --- ¡NUEVO! Inicializar Session State ---
-# Lo usamos para guardar los datos del segmento aleatorio
+# --- ¡NUEVO! Cargar el explicador LIME ---
+explainer = None
+if assets is not None and model is not None:
+    # Le pasamos los datos de test y la lista de features
+    explainer = create_lime_explainer(assets.X_test, assets.FEATURES)
+
+# --- Inicializar Session State ---
 if 'sample_data' not in st.session_state:
     st.session_state.sample_data = None
 
@@ -217,7 +248,6 @@ if assets is not None:
 
     # --- Pestaña 1: Contenido de Visualizaciones ---
     with tab1_viz:
-        # (Esta sección no cambia, la omito por brevedad...)
         st.header("1. Visualizaciones Interactivas (Altair)")
 
         if assets.chart1:
@@ -272,13 +302,14 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-   # --- Pestaña 2: Contenido del Predictor (¡CORREGIDO!) ---
-    # --- Pestaña 2: Contenido del Predictor (CORREGIDO EL PERCENTIL) ---
+    # --- Pestaña 2: Contenido del Predictor (CON LIME) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
         if model is None:
             st.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
+        elif explainer is None: # Chequeamos si LIME cargó
+            st.error("El explicador del modelo (LIME) no pudo cargarse.")
         else:
             st.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
             
@@ -371,19 +402,17 @@ if assets is not None:
                 st.dataframe(input_df)
                 
                 try:
+                    # --- 1. PREDICCIÓN ---
                     prediction = model.predict(input_df)
                     prediction_value = prediction[0] 
                     
                     st.subheader("Resultado de la Predicción:")
                     st.success(f"Ingreso Promedio Estimado: **${prediction_value:,.2f}**")
                     
+                    # --- 2. PERCENTIL ---
                     st.subheader("Análisis Comparativo")
-                    
-                    # --- ¡CAMBIO IMPORTANTE AQUÍ! ---
-                    # Filtramos por un grupo de pares más grande, quitando RangoEtario
                     mask = (
                         (assets.df['NivelEducativo'] == inputs['NivelEducativo']) &
-                        # (assets.df['RangoEtario'] == inputs['RangoEtario']) & # <-- ¡Filtro quitado!
                         (assets.df['Sexo'] == inputs['Sexo'])
                     )
                     subset_df = assets.df[mask]
@@ -391,16 +420,37 @@ if assets is not None:
                     if not subset_df.empty:
                         all_ingresos = subset_df['IngresoPromedio'].values
                         p = percentileofscore(all_ingresos, prediction_value)
-                        
-                        # --- ¡TEXTO ACTUALIZADO AQUÍ! ---
                         st.info(f"""
                         Este ingreso te ubicaría en el **percentil {p:.0f}** dentro de todos los segmentos con el mismo **Nivel Educativo y Sexo**.
                         """)
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
-                        
+                    
+                    # --- 3. ¡NUEVO! INTERPRETACIÓN LIME ---
+                    st.subheader("Interpretación del Modelo (LIME)")
+                    st.markdown("""
+                    Este gráfico explica **por qué** el modelo dio ese resultado.
+                    - **Barras Verdes:** Variables que **aumentaron** la predicción (ej. "NivelEducativo=Universitario").
+                    - **Barras Rojas:** Variables que **disminuyeron** la predicción (ej. "HorasTrabajoPromedio < 40").
+                    """)
+                    
+                    # LIME necesita la fila de input como un array de numpy
+                    input_array = input_df.iloc[0].values
+                    
+                    # Le pedimos a LIME que explique esta predicción
+                    # 'model.predict' es la función que LIME usará para testear
+                    exp = explainer.explain_instance(
+                        data_row=input_array, 
+                        predict_fn=model.predict, 
+                        num_features=len(assets.FEATURES) # Mostrar todas las features
+                    )
+
+                    # LIME nos da un gráfico de matplotlib, lo mostramos con st.pyplot
+                    fig = exp.as_pyplot_figure()
+                    st.pyplot(fig, use_container_width=True)
+
                 except Exception as e:
-                    st.error(f"Error al predecir: {e}")
+                    st.error(f"Error al predecir o interpretar: {e}")
 
 else:
     st.error("No se pudieron cargar los datos ('Tabla_Final.csv'). La aplicación no puede mostrar contenido.")
