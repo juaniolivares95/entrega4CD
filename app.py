@@ -267,7 +267,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (¡CON LAYOUT FINAL!) ---
+    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL CON ÉNFASIS EN GRÁFICO!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -389,7 +389,7 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (¡CON LAYOUT!) ---
+                    # --- 3. INTERPRETACIÓN LIME (¡CON GRÁFICO GRANDE A LA IZQUIERDA!) ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
@@ -441,33 +441,13 @@ if assets is not None:
                         num_features=5 
                     )
                     
-                    # --- ¡NUEVO LAYOUT DE 2 COLUMNAS! ---
-                    col_text, col_chart = st.columns(2)
-
-                    with col_text:
-                        # --- EXPLICACIÓN EN TEXTO (Sutil) ---
-                        st.markdown("#### Análisis de Contribución")
-                        st.markdown("""
-                        A continuación, se muestran los 5 factores principales que el modelo usó para 
-                        calcular tu predicción.
-                        """)
-                        
-                        exp_list = exp.as_list()
-                        
-                        positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
-                        negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
-
-                        if positive_features:
-                            st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
-                        
-                        if negative_features:
-                            st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
-                        
-                        if not positive_features and not negative_features:
-                            st.info("No se identificaron factores de peso para esta predicción.")
+                    # --- ¡NUEVO LAYOUT: GRÁFICO (2/3) A LA IZQUIERDA, TEXTO (1/3) A LA DERECHA! ---
+                    # Ajustamos las proporciones: la primera columna (gráfico) es el doble de grande que la segunda (texto)
+                    col_chart, col_text = st.columns([2, 1]) 
 
                     with col_chart:
-                        # --- GRÁFICO SUTIL CON ALTAIR ---
+                        # --- GRÁFICO SUTIL CON ALTAIR (Más grande) ---
+                        st.markdown("#### Factores de la Predicción") # Título más simple para el gráfico
                         
                         lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
                         lime_data['Impacto'] = lime_data['Peso'].apply(lambda x: 'Positivo' if x > 0 else 'Negativo')
@@ -479,16 +459,36 @@ if assets is not None:
                             color=alt.Color('Impacto', 
                                             scale=alt.Scale(domain=['Positivo', 'Negativo'], 
                                                             range=['#2ca02c', '#d62728']),
-                                            legend=None # Ocultamos la leyenda de "Positivo/Negativo"
+                                            legend=None 
                                            ),
                             tooltip=['Factor', alt.Tooltip('Peso', format=',.0f')]
                         ).properties(
-                            title='Factores Principales de la Predicción',
-                            # --- ¡NUEVA ALTURA! ---
-                            height=250 # Le damos una altura fija de 250px
+                            # Aumentamos la altura para que ocupe más espacio
+                            height=300 
                         ).interactive()
 
                         st.altair_chart(chart, use_container_width=True)
+
+                    with col_text:
+                        # --- EXPLICACIÓN EN TEXTO (Compacto) ---
+                        st.markdown("#### Contribución:")
+                        st.markdown("""
+                        Los siguientes factores fueron clave para la estimación del ingreso:
+                        """)
+                        
+                        exp_list = exp.as_list() # Ya la tenemos, no es necesario volver a calcularla
+                        
+                        positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
+                        negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
+
+                        if positive_features:
+                            st.success(f"**AUMENTARON:** {', '.join(positive_features)}")
+                        
+                        if negative_features:
+                            st.warning(f"**DISMINUYERON:** {', '.join(negative_features)}")
+                        
+                        if not positive_features and not negative_features:
+                            st.info("No se identificaron factores de peso para esta predicción.")
 
 
                 except Exception as e:
