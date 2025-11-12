@@ -273,6 +273,7 @@ if assets is not None:
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
     # --- Pestaña 2: Contenido del Predictor (CON LIME CORREGIDO) ---
+    # --- Pestaña 2: Contenido del Predictor (¡CON LIME REFINADO!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -293,7 +294,7 @@ if assets is not None:
 
             with col1:
                 st.subheader("Variables Categóricas")
-                # ... (Inputs no cambian) ...
+                
                 default_nivel_idx = 0
                 if st.session_state.sample_data:
                     default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
@@ -326,7 +327,7 @@ if assets is not None:
 
             with col2:
                 st.subheader("Variables Numéricas")
-                # ... (Inputs no cambian) ...
+
                 default_horas = 40.0
                 if st.session_state.sample_data:
                     default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
@@ -394,40 +395,25 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. ¡NUEVA LÓGICA LIME (El "Traductor")! ---
+                    # --- 3. INTERPRETACIÓN LIME (Refinada) ---
                     st.subheader("Interpretación del Modelo (LIME)")
-                    st.markdown("""
-                    Este gráfico explica **por qué** el modelo dio ese resultado.
-                    - **Barras Verdes:** Variables que **aumentaron** la predicción.
-                    - **Barras Rojas:** Variables que **disminuyeron** la predicción.
-                    """)
                     
-                    # Paso A: Crear el "Mundo Numérico" para LIME
-                    
-                    # 1. Definimos las columnas categóricas
+                    # (Inicio de la lógica LIME - "El Traductor")
                     categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
                     categorical_features_indices = [assets.FEATURES.index(col) for col in categorical_features_names]
                     
-                    # 2. Creamos un "codificador" que convertirá strings a números
-                    # (ej. Primario=0, Secundario=1...)
-                    # Usamos las listas de 'assets' para asegurar el orden
                     encoder = OrdinalEncoder(categories=[
                         assets.niveles_educativos, 
                         assets.rangos_etarios, 
                         assets.sexos
                     ])
-                    
-                    # 3. Codificamos los datos de entrenamiento de LIME
-                    # Primero, 'fiteamos' el codificador en las columnas categóricas de X_test
                     encoder.fit(assets.X_test[categorical_features_names])
                     
-                    # Luego, transformamos X_test a un formato numérico
                     X_test_encoded = assets.X_test.copy()
                     X_test_encoded[categorical_features_names] = encoder.transform(assets.X_test[categorical_features_names])
                     
-                    # 4. Creamos el Explicador LIME. Ahora SÍ funcionará.
                     explainer = lime.lime_tabular.LimeTabularExplainer(
-                        training_data=X_test_encoded.values, # ¡Datos 100% numéricos!
+                        training_data=X_test_encoded.values,
                         feature_names=assets.FEATURES,
                         class_names=['IngresoPromedio'],
                         categorical_features=categorical_features_indices,
@@ -435,40 +421,49 @@ if assets is not None:
                         mode='regression'
                     )
 
-                    # Paso B: Crear la función "Traductora" (Wrapper)
-                    
                     def predict_fn_wrapper(rows_encoded):
-                        # Esta función recibe filas NUMÉRICAS de LIME
-                        # 1. Convertimos las filas numéricas a un DataFrame
                         df_encoded = pd.DataFrame(rows_encoded, columns=assets.FEATURES)
-                        
-                        # 2. Creamos una copia para decodificar
                         df_decoded = df_encoded.copy()
-                        
-                        # 3. Usamos el 'encoder' para "traducir" de vuelta a strings
                         df_decoded[categorical_features_names] = encoder.inverse_transform(
                             df_encoded[categorical_features_names].astype(int)
                         )
-                        
-                        # 4. Le pasamos el DataFrame con strings al modelo
-                        # El modelo ahora está feliz
                         return model.predict(df_decoded)
 
-                    # Paso C: Explicar la predicción actual
-                    
-                    # 1. Codificamos también la fila de input del usuario
                     input_df_encoded = input_df.copy()
                     input_df_encoded[categorical_features_names] = encoder.transform(input_df[categorical_features_names])
                     input_array_encoded = input_df_encoded.iloc[0].values
+                    # (Fin de la lógica LIME)
 
-                    # 2. Llamamos a LIME
+                    # --- ¡MEJORA 1: Gráfico más pequeño! ---
                     exp = explainer.explain_instance(
-                        data_row=input_array_encoded, # Le pasamos la fila numérica
-                        predict_fn=predict_fn_wrapper, # Le pasamos nuestro "traductor"
-                        num_features=len(assets.FEATURES)
+                        data_row=input_array_encoded,
+                        predict_fn=predict_fn_wrapper, 
+                        num_features=5 # <-- ¡Solo las 5 más importantes!
                     )
+                    
+                    # --- ¡MEJORA 2: Mejor explicación! ---
+                    st.markdown("#### Análisis de Contribución")
+                    
+                    # Extraemos la lista de factores
+                    exp_list = exp.as_list()
+                    
+                    # Creamos listas de factores positivos y negativos
+                    positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
+                    negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
 
-                    # 3. Mostramos el gráfico
+                    # Mostramos los resúmenes
+                    if positive_features:
+                        st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
+                    else:
+                        st.info("Ninguno de los 5 factores principales aumentó la predicción.")
+
+                    if negative_features:
+                        st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
+                    else:
+                        st.info("Ninguno de los 5 factores principales disminuyó la predicción.")
+
+
+                    # Mostramos el gráfico (ahora más pequeño)
                     fig = exp.as_pyplot_figure()
                     st.pyplot(fig, use_container_width=True)
 
