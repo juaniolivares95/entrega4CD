@@ -196,7 +196,7 @@ if 'sample_data' not in st.session_state:
 
 
 # --- Cuerpo Principal ---
-st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
+st.title("📊 Visualización e Integración de Modelos")
 
 if assets is not None:
     st.markdown(f"""
@@ -267,7 +267,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-# --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL CON ÉNFASIS EN GRÁFICO!) ---
+# --- Pestaña 2: Contenido del Predictor ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -288,7 +288,6 @@ if assets is not None:
 
             with col1:
                 st.subheader("Variables Categóricas")
-                # ... (Inputs no cambian) ...
                 default_nivel_idx = 0
                 if st.session_state.sample_data:
                     default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
@@ -321,7 +320,6 @@ if assets is not None:
 
             with col2:
                 st.subheader("Variables Numéricas")
-                # ... (Inputs no cambian) ...
                 default_horas = 40.0
                 if st.session_state.sample_data:
                     default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
@@ -389,7 +387,7 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (¡CON LAYOUT!) ---
+                    # --- 3. INTERPRETACIÓN LIME ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
@@ -441,14 +439,13 @@ if assets is not None:
                         num_features=5 
                     )
                     
-                    # --- ¡CORRECCIÓN AQUÍ! ---
                     # Definimos exp_list ANTES de usarlo en las columnas
                     exp_list = exp.as_list() 
                     
                     col_chart, col_text = st.columns([2, 1]) 
 
                     with col_chart:
-                        # --- GRÁFICO SUTIL CON ALTAIR (Más grande) ---
+                        # --- GRÁFICO SUTIL CON ALTAIR ---
                         st.markdown("#### Factores de la Predicción")
                         
                         lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
@@ -471,7 +468,6 @@ if assets is not None:
                         st.altair_chart(chart, use_container_width=True)
 
                     with col_text:
-                        # --- EXPLICACIÓN EN TEXTO (Compacto) ---
                         st.markdown("#### Contribución:")
                         st.markdown("""
                         Los siguientes factores fueron clave para la estimación del ingreso:
