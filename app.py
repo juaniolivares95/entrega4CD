@@ -60,7 +60,8 @@ def load_app_assets() -> AppAssets | None:
             alt.Chart(pir)
             .mark_bar()
             .encode(
-                x=alt.X("IngisoPromedioUSD_signed:Q", title="Ingreso Promedio (USD)", axis=alt.Axis(format="$.0f")),
+                # --- CORREGIDO AQUÍ ---
+                x=alt.X("IngresoPromedioUSD_signed:Q", title="Ingreso Promedio (USD)", axis=alt.Axis(format="$.0f")),
                 y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"], title="Nivel Educativo"),
                 color=alt.Color("Sexo:N", title="Sexo", scale=alt.Scale(domain=["Varón","Mujer"], range=["#1f77b4","#ff7f0e"])),
                 tooltip=["Sexo","NivelEducativo", alt.Tooltip("IngresoPromedioUSD:Q", format=",.1f", title="Ingreso Promedio (USD)")]
@@ -68,9 +69,11 @@ def load_app_assets() -> AppAssets | None:
             .properties(width=600, height=350, title="Pirámide educativa de ingresos – Gran Mendoza")
         )
         text = alt.Chart(pir).mark_text(align="center", dx=0).encode(
-            x=alt.X("IngisoPromedioUSD_signed:Q"),
+            # --- CORREGIDO AQUÍ ---
+            x=alt.X("IngresoPromedioUSD_signed:Q"),
             y=alt.Y("NivelEducativo:N"),
-            text=alt.Text("IngisoPromedioUSD:Q", format=",.0f")
+            # --- Y CORREGIDO AQUÍ ---
+            text=alt.Text("IngresoPromedioUSD:Q", format=",.0f")
         )
         chart1 = (base + text).resolve_scale(x="shared")
 
@@ -81,9 +84,11 @@ def load_app_assets() -> AppAssets | None:
             .mark_circle(size=90, opacity=0.7)
             .encode(
                 x=alt.X("HorasTrabajoPromedio:Q", title="Horas semanales"),
-                y=alt.Y("IngisoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
+                # --- CORREGIDO AQUÍ ---
+                y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.condition(brush, "Sexo:N", alt.value("lightgray")),
-                tooltip=["Sexo","NivelEducativo","RangoEtario", alt.Tooltip("IngisoPromedioUSD:Q",format=",.1f"), alt.Tooltip("HorasTrabajoPromedio:Q",format=",.1f")]
+                # --- Y CORREGIDO AQUÍ ---
+                tooltip=["Sexo","NivelEducativo","RangoEtario", alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f"), alt.Tooltip("HorasTrabajoPromedio:Q",format=",.1f")]
             )
             .add_params(brush)
             .properties(width=600, height=350, title="Selección libre: Ingreso vs Horas trabajadas")
@@ -92,7 +97,8 @@ def load_app_assets() -> AppAssets | None:
             alt.Chart(df_clean)
             .mark_bar()
             .encode(
-                x=alt.X("mean(IngisoPromedioUSD):Q", title="Ingreso Promedio (USD)"),
+                # --- CORREGIDO AQUÍ ---
+                x=alt.X("mean(IngresoPromedioUSD):Q", title="Ingreso Promedio (USD)"),
                 y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]),
                 color=alt.Color("Sexo:N", title="Sexo")
             )
@@ -104,16 +110,18 @@ def load_app_assets() -> AppAssets | None:
         # --- Gráfico 3: Timeline ---
         timeline_data = (
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
-              .agg({"IngisoPromedioUSD":"mean"})
+              .agg({"IngresoPromedioUSD":"mean"})
         )
         chart3 = (
             alt.Chart(timeline_data)
             .mark_line(point=True)
             .encode(
                 x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
-                y=alt.Y("IngisoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
+                # --- CORREGIDO AQUÍ ---
+                y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
-                tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngisoPromedioUSD:Q",format=",.1f")]
+                # --- Y CORREGIDO AQUÍ ---
+                tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
             )
             .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
             .interactive()
@@ -124,7 +132,6 @@ def load_app_assets() -> AppAssets | None:
         chart1, chart2, chart3 = None, None, None
     
     try:
-        # ¡IMPORTANTE! Ordenamos las listas para usarlas en los selectbox
         niveles_educativos = sorted(df_clean['NivelEducativo'].unique().tolist())
         rangos_etarios = sorted(df_clean['RangoEtario'].unique().tolist())
         sexos = sorted(df_clean['Sexo'].unique().tolist())
@@ -144,7 +151,6 @@ def load_app_assets() -> AppAssets | None:
         st.error(f"Error al procesar las columnas del DataFrame: {e}")
         return None
 
-    # Empaquetamos todo en el objeto AppAssets y lo retornamos
     return AppAssets(
         df=df_clean,
         chart1=chart1,
@@ -172,20 +178,16 @@ def load_model():
         return None
 
 # --- Cargar todo ---
-# Ahora solo tenemos dos variables principales: assets y model
 assets = load_app_assets()
 model = load_model()
 
 # --- Barra Lateral (Sidebar) ---
-# ¡AHORA ESTÁ VACÍA! Solo dejamos un título.
-st.sidebar.title("Proyecto Integrador")
-st.sidebar.markdown("Visualización e Integración de Modelos")
+# ¡ELIMINADA!
 
 
 # --- Cuerpo Principal ---
 st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
 
-# Todo el cuerpo de la app depende de que 'assets' se haya cargado
 if assets is not None:
     st.markdown(f"""
     Bienvenido al dashboard del proyecto. Esta aplicación integra los hallazgos de las entregas anteriores.
@@ -246,24 +248,20 @@ if assets is not None:
         st.dataframe(assets.df)
         st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- ¡NUEVA SECCIÓN DE PREDICCIÓN (Movida desde el Sidebar)! ---
-    st.divider() # Un separador visual
+    # --- Sección de Predicción ---
+    st.divider() 
     st.header("4. Probar el Modelo (Ridge Regression)")
 
-    # Esta lógica depende de que 'model' Y 'assets' estén cargados.
-    # Ya estamos dentro de 'if assets is not None:', así que solo chequeamos 'model'.
     if model is None:
         st.error("El modelo predictivo no pudo cargarse. La función de predicción está deshabilitada.")
     else:
         st.markdown("Ingresa datos de un segmento poblacional para predecir su ingreso promedio.")
         
-        # Usamos columnas para que no se vea desordenado
         col1, col2 = st.columns(2)
         inputs = {}
 
         with col1:
             st.subheader("Variables Categóricas")
-            # Usamos 'key' para evitar errores si movemos esto de nuevo
             inputs['NivelEducativo'] = st.selectbox("Nivel Educativo", options=assets.niveles_educativos, key="main_nivel")
             inputs['RangoEtario'] = st.selectbox("Rango Etario", options=assets.rangos_etarios, key="main_rango")
             inputs['Sexo'] = st.selectbox("Sexo", options=assets.sexos, key="main_sexo")
@@ -275,7 +273,6 @@ if assets is not None:
             inputs['TasaEmpleoPonderada'] = st.slider("Tasa de Empleo Ponderada", min_value=0.0, max_value=1.0, value=0.5, step=0.01, key="main_empleo")
             inputs['Poblacion'] = st.number_input("Población del Segmento", min_value=0, max_value=100000, value=1000, step=100, key="main_poblacion")
 
-        # Botón de predicción, ahora en el cuerpo principal
         if st.button("Predecir Ingreso Promedio", type="primary"):
             input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
             st.markdown("---")
@@ -290,5 +287,4 @@ if assets is not None:
                 st.error(f"Error al predecir: {e}")
 
 else:
-    # Este es el 'else' principal que se activa si 'assets' es None
     st.error("No se pudieron cargar los datos ('Tabla_Final.csv'). La aplicación no puede mostrar contenido.")
