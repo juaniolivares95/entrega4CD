@@ -273,6 +273,7 @@ if assets is not None:
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
    # --- Pestaña 2: Contenido del Predictor (¡CORREGIDO!) ---
+    # --- Pestaña 2: Contenido del Predictor (CORREGIDO EL PERCENTIL) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -300,9 +301,8 @@ if assets is not None:
                 inputs['NivelEducativo'] = st.selectbox(
                     "Nivel Educativo", 
                     options=assets.niveles_educativos, 
-                    index=default_nivel_idx, # <--- ¡AHORA FUNCIONARÁ!
-                    help="Máximo nivel educativo alcanzado por el segmento." 
-                    # Se quitó: key="main_nivel"
+                    index=default_nivel_idx,
+                    help="Máximo nivel educativo alcanzado por el segmento."
                 )
 
                 default_rango_idx = 0
@@ -311,9 +311,8 @@ if assets is not None:
                 inputs['RangoEtario'] = st.selectbox(
                     "Rango Etario", 
                     options=assets.rangos_etarios, 
-                    index=default_rango_idx, # <--- ¡AHORA FUNCIONARÁ!
+                    index=default_rango_idx,
                     help="Grupo de edad al que pertenece el segmento."
-                    # Se quitó: key="main_rango"
                 )
 
                 default_sexo_idx = 0
@@ -322,9 +321,8 @@ if assets is not None:
                 inputs['Sexo'] = st.selectbox(
                     "Sexo", 
                     options=assets.sexos, 
-                    index=default_sexo_idx, # <--- ¡AHORA FUNCIONARÁ!
+                    index=default_sexo_idx,
                     help="Sexo del segmento."
-                    # Se quitó: key="main_sexo"
                 )
 
             with col2:
@@ -337,7 +335,6 @@ if assets is not None:
                     "Horas de Trabajo Promedio", 
                     min_value=0.0, max_value=80.0, value=default_horas, step=0.1, 
                     help="Promedio de horas semanales trabajadas por el segmento."
-                    # Se quitó: key="main_horas"
                 )
 
                 default_actividad = 0.5
@@ -347,7 +344,6 @@ if assets is not None:
                     "Tasa de Actividad Ponderada", 
                     min_value=0.0, max_value=1.0, value=default_actividad, step=0.01, 
                     help="Porcentaje de la población del segmento que está activa (trabaja o busca trabajo)."
-                    # Se quitó: key="main_actividad"
                 )
 
                 default_empleo = 0.5
@@ -357,7 +353,6 @@ if assets is not None:
                     "Tasa de Empleo Ponderada", 
                     min_value=0.0, max_value=1.0, value=default_empleo, step=0.01, 
                     help="Porcentaje de la población del segmento que está empleada."
-                    # Se quitó: key="main_empleo"
                 )
 
                 default_poblacion = 1000
@@ -367,11 +362,9 @@ if assets is not None:
                     "Población del Segmento", 
                     min_value=0, max_value=100000, value=default_poblacion, step=100, 
                     help="Número de personas en este segmento."
-                    # Se quitó: key="main_poblacion"
                 )
 
             if st.button("Predecir Ingreso Promedio", type="primary"):
-                # (El resto del código de predicción y percentil no cambia)
                 input_df = pd.DataFrame([inputs], columns=assets.FEATURES)
                 st.markdown("---")
                 st.subheader("Datos de Entrada:")
@@ -386,9 +379,11 @@ if assets is not None:
                     
                     st.subheader("Análisis Comparativo")
                     
+                    # --- ¡CAMBIO IMPORTANTE AQUÍ! ---
+                    # Filtramos por un grupo de pares más grande, quitando RangoEtario
                     mask = (
                         (assets.df['NivelEducativo'] == inputs['NivelEducativo']) &
-                        (assets.df['RangoEtario'] == inputs['RangoEtario']) &
+                        # (assets.df['RangoEtario'] == inputs['RangoEtario']) & # <-- ¡Filtro quitado!
                         (assets.df['Sexo'] == inputs['Sexo'])
                     )
                     subset_df = assets.df[mask]
@@ -397,9 +392,9 @@ if assets is not None:
                         all_ingresos = subset_df['IngresoPromedio'].values
                         p = percentileofscore(all_ingresos, prediction_value)
                         
+                        # --- ¡TEXTO ACTUALIZADO AQUÍ! ---
                         st.info(f"""
-                        Este ingreso te ubicaría en el **percentil {p:.0f}** dentro de todos los segmentos con las mismas características 
-                        (Nivel Educativo, Rango Etario y Sexo).
+                        Este ingreso te ubicaría en el **percentil {p:.0f}** dentro de todos los segmentos con el mismo **Nivel Educativo y Sexo**.
                         """)
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
