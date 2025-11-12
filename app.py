@@ -48,11 +48,7 @@ def load_app_assets() -> AppAssets | None:
         return None
     
     try:
-        # --- ¡NUEVO! Definimos el orden del eje Y aquí ---
         y_sort_order = ["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]
-        
-        # --- ¡NUEVO! Creamos la definición del eje Y aquí ---
-        # Así nos aseguramos que sea idéntica en ambas capas
         y_axis_definition = alt.Y("NivelEducativo:N", sort=y_sort_order, title="Nivel Educativo")
 
         # --- Gráfico 1: Pirámide ---
@@ -68,20 +64,38 @@ def load_app_assets() -> AppAssets | None:
             .mark_bar()
             .encode(
                 x=alt.X("IngresoPromedioUSD_signed:Q", title="Ingreso Promedio (USD)", axis=alt.Axis(format="$.0f")),
-                # --- CAMBIADO AQUÍ ---
                 y=y_axis_definition, 
                 color=alt.Color("Sexo:N", title="Sexo", scale=alt.Scale(domain=["Varón","Mujer"], range=["#1f77b4","#ff7f0e"])),
                 tooltip=["Sexo","NivelEducativo", alt.Tooltip("IngresoPromedioUSD:Q", format=",.1f", title="Ingreso Promedio (USD)")]
             )
             .properties(width=600, height=350, title="Pirámide educativa de ingresos – Gran Mendoza")
         )
-        text = alt.Chart(pir).mark_text(align="center", dx=0).encode(
+        
+        # --- MEJORA GRÁFICO 1 ---
+        # Texto para Varones (positivos): alineado a la izquierda, 5px afuera, color blanco
+        text_varon = alt.Chart(pir.loc[pir['Sexo'] == 'Varón']).mark_text(
+            align="left",
+            dx=5, 
+            color="white" # Color blanco para modo oscuro
+        ).encode(
             x=alt.X("IngresoPromedioUSD_signed:Q"),
-            # --- CAMBIADO AQUÍ (debe ser idéntico al de base) ---
             y=y_axis_definition, 
             text=alt.Text("IngresoPromedioUSD:Q", format=",.0f")
         )
-        chart1 = (base + text).resolve_scale(x="shared")
+
+        # Texto para Mujeres (negativos): alineado a la derecha, 5px afuera, color blanco
+        text_mujer = alt.Chart(pir.loc[pir['Sexo'] == 'Mujer']).mark_text(
+            align="right",
+            dx=-5,
+            color="white" # Color blanco para modo oscuro
+        ).encode(
+            x=alt.X("IngresoPromedioUSD_signed:Q"),
+            y=y_axis_definition, 
+            text=alt.Text("IngresoPromedioUSD:Q", format=",.0f")
+        )
+        
+        # Combinamos la base + los dos textos
+        chart1 = (base + text_varon + text_mujer).resolve_scale(x="shared")
 
         # --- Gráfico 2: Panel Brushing ---
         brush = alt.selection_interval(encodings=["x","y"])
@@ -102,7 +116,6 @@ def load_app_assets() -> AppAssets | None:
             .mark_bar()
             .encode(
                 x=alt.X("mean(IngresoPromedioUSD):Q", title="Ingreso Promedio (USD)"),
-                # --- CAMBIADO AQUÍ (para consistencia) ---
                 y=alt.Y("NivelEducativo:N", sort=y_sort_order),
                 color=alt.Color("Sexo:N", title="Sexo")
             )
@@ -116,6 +129,11 @@ def load_app_assets() -> AppAssets | None:
             df_clean.groupby(["RangoEtario","NivelEducativo"], as_index=False)
               .agg({"IngresoPromedioUSD":"mean"})
         )
+        
+        # --- MEJORA GRÁFICO 3 ---
+        # 1. Crear una selección múltiple vinculada a la leyenda
+        selection = alt.selection_multi(fields=['NivelEducativo'], bind='legend')
+
         chart3 = (
             alt.Chart(timeline_data)
             .mark_line(point=True)
@@ -123,10 +141,14 @@ def load_app_assets() -> AppAssets | None:
                 x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
                 y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
+                # 2. La opacidad depende de la selección (1.0 si está seleccionado, 0.2 si no)
+                opacity=alt.condition(selection, alt.value(1.0), alt.value(0.2)),
                 tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
             )
             .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
-            .interactive()
+            # 3. Añadir la selección al gráfico
+            .add_params(selection)
+            # 4. Quitamos .interactive() porque interfiere con la selección de leyenda
         )
 
     except Exception as e:
@@ -206,8 +228,9 @@ if assets is not None:
         st.subheader("Evolución del Ingreso Promedio por Edad y Nivel Educativo")
         st.altair_chart(assets.chart3, use_container_width=True)
         st.markdown("""
-        Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios...
-        """)
+        Esta visualización muestra la **trayectoria de ingresos** a lo largo de los diferentes rangos etarios.
+        **¡Interactivo!** Haz clic en los elementos de la leyenda (ej. "Secundario") para filtrar las líneas.
+        """) # ¡Texto actualizado!
 
     if assets.chart2:
         st.subheader("Panel Interactivo: Ingreso vs. Horas de Trabajo y Nivel Educativo")
