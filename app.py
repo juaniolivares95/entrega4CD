@@ -6,7 +6,7 @@ import numpy as np
 import lime
 import lime.lime_tabular
 from sklearn.model_selection import train_test_split 
-from sklearn.preprocessing import OrdinalEncoder # <-- ¡NUEVO IMPORTE!
+from sklearn.preprocessing import OrdinalEncoder
 from dataclasses import dataclass
 from scipy.stats import percentileofscore
 
@@ -187,9 +187,6 @@ def load_model():
         st.error(f"Error Crítico al cargar 'modelo_ridge.pkl': {e}")
         return None
 
-# --- Función LIME ELIMINADA ---
-# La crearemos al vuelo
-
 # --- Cargar todo ---
 assets = load_app_assets()
 model = load_model()
@@ -272,8 +269,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (CON LIME CORREGIDO) ---
-    # --- Pestaña 2: Contenido del Predictor (¡CON LIME REFINADO!) ---
+    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -294,7 +290,7 @@ if assets is not None:
 
             with col1:
                 st.subheader("Variables Categóricas")
-                
+                # ... (Inputs no cambian) ...
                 default_nivel_idx = 0
                 if st.session_state.sample_data:
                     default_nivel_idx = assets.niveles_educativos.index(st.session_state.sample_data['NivelEducativo'])
@@ -327,7 +323,7 @@ if assets is not None:
 
             with col2:
                 st.subheader("Variables Numéricas")
-
+                # ... (Inputs no cambian) ...
                 default_horas = 40.0
                 if st.session_state.sample_data:
                     default_horas = st.session_state.sample_data['HorasTrabajoPromedio']
@@ -434,37 +430,41 @@ if assets is not None:
                     input_array_encoded = input_df_encoded.iloc[0].values
                     # (Fin de la lógica LIME)
 
-                    # --- ¡MEJORA 1: Gráfico más pequeño! ---
+                    # Gráfico con 5 features
                     exp = explainer.explain_instance(
                         data_row=input_array_encoded,
                         predict_fn=predict_fn_wrapper, 
-                        num_features=5 # <-- ¡Solo las 5 más importantes!
+                        num_features=5 # ¡Solo las 5 más importantes!
                     )
                     
-                    # --- ¡MEJORA 2: Mejor explicación! ---
+                    # --- ¡MEJORA 1: Mostrar los pesos! ---
                     st.markdown("#### Análisis de Contribución")
+                    st.markdown("""
+                    A continuación, se muestran los 5 factores principales que el modelo usó para 
+                    calcular tu predicción, y cuánto sumó o restó cada uno (en ARS).
+                    """)
                     
-                    # Extraemos la lista de factores
                     exp_list = exp.as_list()
                     
-                    # Creamos listas de factores positivos y negativos
-                    positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
-                    negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
+                    # Formateamos el string para incluir el peso (w)
+                    positive_features = [f"**{f}** (Suma: **${w:,.0f}**)" for f, w in exp_list if w > 0]
+                    negative_features = [f"**{f}** (Resta: **${w:,.0f}**)" for f, w in exp_list if w < 0]
 
                     # Mostramos los resúmenes
                     if positive_features:
-                        st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
-                    else:
-                        st.info("Ninguno de los 5 factores principales aumentó la predicción.")
-
+                        st.success(f"**Factores que AUMENTARON la predicción:** {'; '.join(positive_features)}")
+                    
                     if negative_features:
-                        st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
-                    else:
-                        st.info("Ninguno de los 5 factores principales disminuyó la predicción.")
+                        st.warning(f"**Factores que DISMINUYERON la predicción:** {'; '.join(negative_features)}")
+                    
+                    if not positive_features and not negative_features:
+                        st.info("No se identificaron factores de peso para esta predicción.")
 
 
-                    # Mostramos el gráfico (ahora más pequeño)
+                    # --- ¡MEJORA 2: Achicar el gráfico! ---
                     fig = exp.as_pyplot_figure()
+                    # Definimos un tamaño (ancho, alto) más compacto
+                    fig.set_size_inches(10, 4) 
                     st.pyplot(fig, use_container_width=True)
 
                 except Exception as e:
