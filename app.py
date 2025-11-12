@@ -182,19 +182,14 @@ def load_model():
         return None
 
 @st.cache_resource
-def create_lime_explainer(assets):
+def create_lime_explainer(x_test_df, features_list):
     """
     Crea y cachea un explicador LIME Tabular.
-    Requiere que 'assets' esté cargado.
     """
-    if assets is None:
-        return None
-    
-    # Identificar los *índices* de las columnas categóricas
     categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
     try:
         categorical_features_indices = [
-            assets.FEATURES.index(col) for col in categorical_features_names
+            features_list.index(col) for col in categorical_features_names
         ]
     except ValueError as e:
         st.error(f"Error en LIME: La columna {e} no se encuentra en FEATURES.")
@@ -202,8 +197,8 @@ def create_lime_explainer(assets):
 
     try:
         explainer = lime.lime_tabular.LimeTabularExplainer(
-            training_data=assets.X_test.values, # LIME usa numpy array
-            feature_names=assets.FEATURES,
+            training_data=x_test_df.values, # LIME usa numpy array
+            feature_names=features_list,
             class_names=['IngresoPromedio'],
             categorical_features=categorical_features_indices,
             mode='regression',
@@ -217,12 +212,11 @@ def create_lime_explainer(assets):
 # --- Cargar todo ---
 assets = load_app_assets()
 model = load_model()
-explainer = create_lime_explainer(assets) # ¡NUEVO!
 
-# --- Inicializar Session State (¡NUEVO!) ---
-# Lo usamos para guardar los datos del segmento aleatorio
-if 'sample_data' not in st.session_state:
-    st.session_state.sample_data = None
+# ¡NUEVO! - Llamar a la función con argumentos hashables
+explainer = None
+if assets is not None:
+    explainer = create_lime_explainer(assets.X_test, assets.FEATURES)
 
 # --- Barra Lateral (Sidebar) (¡REDUCIDA!) ---
 st.sidebar.title("Proyecto Integrador")
