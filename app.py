@@ -48,6 +48,13 @@ def load_app_assets() -> AppAssets | None:
         return None
     
     try:
+        # --- ¡NUEVO! Definimos el orden del eje Y aquí ---
+        y_sort_order = ["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]
+        
+        # --- ¡NUEVO! Creamos la definición del eje Y aquí ---
+        # Así nos aseguramos que sea idéntica en ambas capas
+        y_axis_definition = alt.Y("NivelEducativo:N", sort=y_sort_order, title="Nivel Educativo")
+
         # --- Gráfico 1: Pirámide ---
         pir = (
             df_clean.groupby(["NivelEducativo","Sexo"], as_index=False)
@@ -60,19 +67,18 @@ def load_app_assets() -> AppAssets | None:
             alt.Chart(pir)
             .mark_bar()
             .encode(
-                # --- CORREGIDO AQUÍ ---
                 x=alt.X("IngresoPromedioUSD_signed:Q", title="Ingreso Promedio (USD)", axis=alt.Axis(format="$.0f")),
-                y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"], title="Nivel Educativo"),
+                # --- CAMBIADO AQUÍ ---
+                y=y_axis_definition, 
                 color=alt.Color("Sexo:N", title="Sexo", scale=alt.Scale(domain=["Varón","Mujer"], range=["#1f77b4","#ff7f0e"])),
                 tooltip=["Sexo","NivelEducativo", alt.Tooltip("IngresoPromedioUSD:Q", format=",.1f", title="Ingreso Promedio (USD)")]
             )
             .properties(width=600, height=350, title="Pirámide educativa de ingresos – Gran Mendoza")
         )
         text = alt.Chart(pir).mark_text(align="center", dx=0).encode(
-            # --- CORREGIDO AQUÍ ---
             x=alt.X("IngresoPromedioUSD_signed:Q"),
-            y=alt.Y("NivelEducativo:N"),
-            # --- Y CORREGIDO AQUÍ ---
+            # --- CAMBIADO AQUÍ (debe ser idéntico al de base) ---
+            y=y_axis_definition, 
             text=alt.Text("IngresoPromedioUSD:Q", format=",.0f")
         )
         chart1 = (base + text).resolve_scale(x="shared")
@@ -84,10 +90,8 @@ def load_app_assets() -> AppAssets | None:
             .mark_circle(size=90, opacity=0.7)
             .encode(
                 x=alt.X("HorasTrabajoPromedio:Q", title="Horas semanales"),
-                # --- CORREGIDO AQUÍ ---
                 y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.condition(brush, "Sexo:N", alt.value("lightgray")),
-                # --- Y CORREGIDO AQUÍ ---
                 tooltip=["Sexo","NivelEducativo","RangoEtario", alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f"), alt.Tooltip("HorasTrabajoPromedio:Q",format=",.1f")]
             )
             .add_params(brush)
@@ -97,9 +101,9 @@ def load_app_assets() -> AppAssets | None:
             alt.Chart(df_clean)
             .mark_bar()
             .encode(
-                # --- CORREGIDO AQUÍ ---
                 x=alt.X("mean(IngresoPromedioUSD):Q", title="Ingreso Promedio (USD)"),
-                y=alt.Y("NivelEducativo:N", sort=["Primario","Secundario","Terciario no universitario", "Universitario de grado","Posgrado (especialización, maestría o doctorado)"]),
+                # --- CAMBIADO AQUÍ (para consistencia) ---
+                y=alt.Y("NivelEducativo:N", sort=y_sort_order),
                 color=alt.Color("Sexo:N", title="Sexo")
             )
             .transform_filter(brush)
@@ -117,10 +121,8 @@ def load_app_assets() -> AppAssets | None:
             .mark_line(point=True)
             .encode(
                 x=alt.X("RangoEtario:N", title="Rango Etario", sort=["15-19","20-24","25-29","30-34","35-39","40-44", "45-49","50-54","55-59","60-64","65+"]),
-                # --- CORREGIDO AQUÍ ---
                 y=alt.Y("IngresoPromedioUSD:Q", title="Ingreso Promedio (USD)"),
                 color=alt.Color("NivelEducativo:N", title="Nivel Educativo"),
-                # --- Y CORREGIDO AQUÍ ---
                 tooltip=["RangoEtario","NivelEducativo",alt.Tooltip("IngresoPromedioUSD:Q",format=",.1f")]
             )
             .properties(width=700, height=350, title="Timeline socioeducativo de ingresos (Gran Mendoza)")
@@ -180,10 +182,6 @@ def load_model():
 # --- Cargar todo ---
 assets = load_app_assets()
 model = load_model()
-
-# --- Barra Lateral (Sidebar) ---
-# ¡ELIMINADA!
-
 
 # --- Cuerpo Principal ---
 st.title("📊 4ta Entrega: Visualización e Integración de Modelos")
