@@ -267,7 +267,7 @@ if assets is not None:
             st.dataframe(assets.df)
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
-    # --- Pestaña 2: Contenido del Predictor (¡CON GRÁFICO LIME SUTIL!) ---
+    # --- Pestaña 2: Contenido del Predictor (¡CON LAYOUT FINAL!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -389,7 +389,7 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (¡CON GRÁFICO ALTAIR!) ---
+                    # --- 3. INTERPRETACIÓN LIME (¡CON LAYOUT!) ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
@@ -435,65 +435,60 @@ if assets is not None:
                     input_array_encoded = input_df_encoded.iloc[0].values
                     # (Fin de la lógica LIME)
 
-                    # Pedimos a LIME las 5 features más importantes
                     exp = explainer.explain_instance(
                         data_row=input_array_encoded,
                         predict_fn=predict_fn_wrapper, 
                         num_features=5 
                     )
                     
-                    # --- EXPLICACIÓN EN TEXTO (Sutil) ---
-                    st.markdown("#### Análisis de Contribución")
-                    st.markdown("""
-                    A continuación, se muestran los 5 factores principales que el modelo usó para 
-                    calcular tu predicción.
-                    """)
-                    
-                    exp_list = exp.as_list()
-                    
-                    positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
-                    negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
+                    # --- ¡NUEVO LAYOUT DE 2 COLUMNAS! ---
+                    col_text, col_chart = st.columns(2)
 
-                    if positive_features:
-                        st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
-                    if negative_features:
-                        st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
-                    if not positive_features and not negative_features:
-                        st.info("No se identificaron factores de peso para esta predicción.")
+                    with col_text:
+                        # --- EXPLICACIÓN EN TEXTO (Sutil) ---
+                        st.markdown("#### Análisis de Contribución")
+                        st.markdown("""
+                        A continuación, se muestran los 5 factores principales que el modelo usó para 
+                        calcular tu predicción.
+                        """)
+                        
+                        exp_list = exp.as_list()
+                        
+                        positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
+                        negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
 
-                    # --- ¡NUEVO GRÁFICO SUTIL CON ALTAIR! ---
-                    
-                    # 1. Convertir los datos de LIME a un DataFrame
-                    lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
-                    
-                    # 2. Añadir una columna para el color (positivo/negativo)
-                    lime_data['Impacto'] = lime_data['Peso'].apply(lambda x: 'Positivo' if x > 0 else 'Negativo')
-                    
-                    # 3. Limpiar los strings de los factores para que se vean mejor
-                    lime_data['Factor'] = lime_data['Factor'].str.replace('=', ' = ', regex=False)
-                    
-                    # 4. Crear el gráfico de barras horizontales
-                    chart = alt.Chart(lime_data).mark_bar().encode(
-                        # El eje X es el peso (cuánto suma o resta)
-                        x=alt.X('Peso', title='Impacto en la Predicción (ARS)'),
+                        if positive_features:
+                            st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
                         
-                        # El eje Y es el factor, ordenado por el peso
-                        y=alt.Y('Factor', title='Factor', sort='-x'),
+                        if negative_features:
+                            st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
                         
-                        # El color depende de si es Positivo o Negativo
-                        color=alt.Color('Impacto', 
-                                        scale=alt.Scale(domain=['Positivo', 'Negativo'], 
-                                                        range=['#2ca02c', '#d62728']) # Verde y Rojo
-                                       ),
-                        
-                        # Tooltip para ver los detalles
-                        tooltip=['Factor', alt.Tooltip('Peso', format=',.0f')]
-                    ).properties(
-                        title='Factores Principales de la Predicción'
-                    ).interactive() # Hacemos el gráfico interactivo
+                        if not positive_features and not negative_features:
+                            st.info("No se identificaron factores de peso para esta predicción.")
 
-                    # 5. Mostrar el gráfico de Altair
-                    st.altair_chart(chart, use_container_width=True)
+                    with col_chart:
+                        # --- GRÁFICO SUTIL CON ALTAIR ---
+                        
+                        lime_data = pd.DataFrame(exp_list, columns=['Factor', 'Peso'])
+                        lime_data['Impacto'] = lime_data['Peso'].apply(lambda x: 'Positivo' if x > 0 else 'Negativo')
+                        lime_data['Factor'] = lime_data['Factor'].str.replace('=', ' = ', regex=False)
+                        
+                        chart = alt.Chart(lime_data).mark_bar().encode(
+                            x=alt.X('Peso', title='Impacto en la Predicción (ARS)'),
+                            y=alt.Y('Factor', title='Factor', sort='-x'),
+                            color=alt.Color('Impacto', 
+                                            scale=alt.Scale(domain=['Positivo', 'Negativo'], 
+                                                            range=['#2ca02c', '#d62728']),
+                                            legend=None # Ocultamos la leyenda de "Positivo/Negativo"
+                                           ),
+                            tooltip=['Factor', alt.Tooltip('Peso', format=',.0f')]
+                        ).properties(
+                            title='Factores Principales de la Predicción',
+                            # --- ¡NUEVA ALTURA! ---
+                            height=250 # Le damos una altura fija de 250px
+                        ).interactive()
+
+                        st.altair_chart(chart, use_container_width=True)
 
 
                 except Exception as e:
