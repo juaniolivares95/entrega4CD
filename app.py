@@ -270,6 +270,7 @@ if assets is not None:
             st.markdown(f"Mostrando **{len(assets.df)}** registros limpios.")
 
     # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL!) ---
+    # --- Pestaña 2: Contenido del Predictor (¡VERSIÓN FINAL PULIDA!) ---
     with tab2_model:
         st.header("Probar el Modelo (Ridge Regression)")
 
@@ -391,13 +392,21 @@ if assets is not None:
                     else:
                         st.warning("No se encontraron datos históricos para este segmento exacto para calcular el percentil.")
                     
-                    # --- 3. INTERPRETACIÓN LIME (Refinada) ---
+                    # --- 3. INTERPRETACIÓN LIME (¡MEJORA FINAL!) ---
                     st.subheader("Interpretación del Modelo (LIME)")
                     
                     # (Inicio de la lógica LIME - "El Traductor")
                     categorical_features_names = ['NivelEducativo', 'RangoEtario', 'Sexo']
                     categorical_features_indices = [assets.FEATURES.index(col) for col in categorical_features_names]
                     
+                    # --- ¡MEJORA DE LEGIBILIDAD! ---
+                    # 1. Creamos el "diccionario traductor" para LIME
+                    categorical_names_map = {
+                        categorical_features_indices[0]: assets.niveles_educativos, # 'NivelEducativo'
+                        categorical_features_indices[1]: assets.rangos_etarios,    # 'RangoEtario'
+                        categorical_features_indices[2]: assets.sexos               # 'Sexo'
+                    }
+
                     encoder = OrdinalEncoder(categories=[
                         assets.niveles_educativos, 
                         assets.rangos_etarios, 
@@ -413,6 +422,11 @@ if assets is not None:
                         feature_names=assets.FEATURES,
                         class_names=['IngresoPromedio'],
                         categorical_features=categorical_features_indices,
+                        
+                        # --- ¡MEJORA DE LEGIBILIDAD! ---
+                        # 2. Le pasamos el "diccionario traductor" a LIME
+                        categorical_names=categorical_names_map, 
+                        
                         discretize_continuous=False,
                         mode='regression'
                     )
@@ -434,34 +448,33 @@ if assets is not None:
                     exp = explainer.explain_instance(
                         data_row=input_array_encoded,
                         predict_fn=predict_fn_wrapper, 
-                        num_features=5 # ¡Solo las 5 más importantes!
+                        num_features=5 
                     )
                     
-                    # --- ¡MEJORA 1: Mostrar los pesos! ---
+                    # --- ¡MEJORA DE EXPLICACIÓN (Sin Pesos)! ---
                     st.markdown("#### Análisis de Contribución")
                     st.markdown("""
                     A continuación, se muestran los 5 factores principales que el modelo usó para 
-                    calcular tu predicción, y cuánto sumó o restó cada uno (en ARS).
+                    calcular tu predicción.
                     """)
                     
                     exp_list = exp.as_list()
                     
-                    # Formateamos el string para incluir el peso (w)
-                    positive_features = [f"**{f}** (Suma: **${w:,.0f}**)" for f, w in exp_list if w > 0]
-                    negative_features = [f"**{f}** (Resta: **${w:,.0f}**)" for f, w in exp_list if w < 0]
+                    # ¡Quitamos los pesos (w)!
+                    positive_features = [f"**{f}**" for f, w in exp_list if w > 0]
+                    negative_features = [f"**{f}**" for f, w in exp_list if w < 0]
 
-                    # Mostramos los resúmenes
+                    # Mostramos los resúmenes limpios
                     if positive_features:
-                        st.success(f"**Factores que AUMENTARON la predicción:** {'; '.join(positive_features)}")
+                        st.success(f"**Factores que AUMENTARON la predicción:** {', '.join(positive_features)}")
                     
                     if negative_features:
-                        st.warning(f"**Factores que DISMINUYERON la predicción:** {'; '.join(negative_features)}")
+                        st.warning(f"**Factores que DISMINUYERON la predicción:** {', '.join(negative_features)}")
                     
                     if not positive_features and not negative_features:
                         st.info("No se identificaron factores de peso para esta predicción.")
 
-
-                    # --- ¡MEJORA 2: Achicar el gráfico! ---
+                    # --- ¡MEJORA DE TAMAÑO! ---
                     fig = exp.as_pyplot_figure()
                     # Definimos un tamaño (ancho, alto) más compacto
                     fig.set_size_inches(10, 4) 
